@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+database/backups/
+database/*.dump
+database/backup_*.sql
+database/rooms_restore.sql
+.DS_Store

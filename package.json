@@ -1,0 +1,13 @@
+{
+  "name": "bookaitu",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "render:build": "npm ci --prefix backend --omit=dev && npm ci --prefix frontend --include=dev && npm run build",
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview"
+  }
+}

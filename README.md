@@ -1,2 +1,35 @@
 # BookAITU
-BookAITU - online booking classrooms and auditoriums in AITU
+
+Backend: Node.js + Express + PostgreSQL (`pg`, SQL migrations). Frontend: React + Vite, простой интерфейс Microsoft-входа, обязательного TOTP и бронирования.
+
+Основной документ для настройки и подключения другого frontend: [backend/AUTH.md](backend/AUTH.md). Он содержит настройку single-tenant Microsoft Entra, API, состояния, CSRF/cookies, роли и проверенные ограничения.
+
+Административная панель и контракт её API: [backend/ADMIN.md](backend/ADMIN.md). Роль первого администратора назначена подтверждённому аккаунту `260737@astanait.edu.kz`. После входа и 2FA открыть кнопку «Админ-панель» в верхней панели. Доступны статистика, фильтруемые списки, редактирование помещений/пользователей, отмена с причиной и журнал действий.
+
+## Локальный запуск
+
+В `backend` выполнить `npm install`, заполнить локальный `.env` по `.env.example`, затем `npm start`. Новый интерфейс находится в `frontend`: выполнить `npm install --prefix frontend`, затем из корня `npm run dev`. Настройка и ограничения: [frontend/README.md](frontend/README.md).
+
+Текущие локальные адреса: frontend `http://localhost:5173`, backend `http://localhost:3101`. Порт 3001 занят уже существующим процессом, который не останавливался. Текущий callback для Entra: `http://localhost:3101/api/auth/microsoft/callback`.
+
+Tenant ID, Client ID и Client Secret ещё нужно настроить. Адрес университетской почты не заменяет регистрацию приложения. До этого форма показывает незавершённую настройку, Microsoft-вход отвечает 503, а бизнес-API не допускает анонимный доступ.
+
+Не публиковать `.env`, секреты Microsoft/сессий/AES и дампы БД. Локальные session/AES-ключи сгенерированы без вывода значений. Только backend работает с Client Secret и ключами; frontend получает HttpOnly session cookie, CSRF token и безопасный профиль.
+
+## Данные и доступ
+
+`users` хранит проверенный Microsoft identity (`tenantId:oid`) и параметры 2FA. `rooms` содержит 258 кабинетов и три зоны: Assembly Hall, Open Space, Atameken Space. `bookings` связывает пользователя, помещение, дату и период `start_time`–`end_time`. `auth_sessions` хранит ограниченные по сроку серверные сессии, `schema_migrations` — применённые SQL-файлы и контрольные суммы.
+
+Новый подтверждённый пользователь получает роль `user`. Обычный пользователь создаёт/читает/отменяет свои брони; администратор видит все. Список пользователей — только для администратора. Присланный клиентом `user_id` не используется. Совпадение почты со старым аккаунтом не даёт автоматическую привязку Microsoft или чужую роль.
+
+Существующие записи при миграции 005 сохранены. Содержимое SQL-файлов из `database` не следует выполнять как автоматическую очистку/восстановление. `npm run db:migrate` выполняет только новые миграции после свежего проверенного backup; старые destructive migrations требуют отдельного opt-in, если они ещё не применены.
+
+## Проверки
+
+- В backend: `npm test` — 35 тестов административного и обычного API, Microsoft policy, безопасной диагностики причин отказа, состояний входа, CSRF, TOTP/recovery, шифрования и блокировок.
+- В backend: `npm run api:check` — реальный PostgreSQL session store, статус настройки и запрет анонимного доступа; тестовая сессия удаляется logout.
+- В backend: `npm run auth:db:check` — сервис 2FA на реальном PostgreSQL во временной таблице с полным откатом.
+- В backend: `npm run admin:db:check` — административный API с реальными SQL во временных таблицах и полным откатом.
+- В frontend: `npm test`, `npm run build`.
+
+Все перечисленные проверки прошли. Тесты HTTP используют тестовый Microsoft-provider; живой университетский Microsoft-вход без App Registration не проверен. В рабочем сервере нет тестового входа или обхода второго фактора.

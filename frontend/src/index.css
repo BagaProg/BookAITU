@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/* Design tokens taken from the Figma file */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #fafbfd;
+  --color-ink: #142d50;
+  --color-copy: #192b42;
+  --color-muted: #66758a;
+  --color-line: #dfe5ed;
+  --color-tint: #eff5fc;
+  --color-accent: #365f91;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-copy antialiased;
+  }
+}

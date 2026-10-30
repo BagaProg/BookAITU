@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: bookaitu
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm run render:build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 24.18.0
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: PG_ALLOW_WRITE
+        value: "true"
+      - key: UNIVERSITY_EMAIL_DOMAINS
+        value: astanait.edu.kz
+      - key: VITE_API_URL
+        value: ""
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: AUTH_ENCRYPTION_KEY
+        sync: false
+      - key: MICROSOFT_TENANT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_ID
+        sync: false
+      - key: MICROSOFT_CLIENT_SECRET
+        sync: false
