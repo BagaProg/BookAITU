@@ -114,7 +114,22 @@ test('schedule writes validate input and require CSRF', async()=>{
 });
 test('schedule creation locks the room and saves an explicit interval', async()=>{
  const calls=[];
- pool.connect=async()=>({query:async(sql,params)=>{calls.push(sql);return sql.startsWith('SELECT')?{rowCount:1,rows:[{id:'1'}]}:sql.startsWith('INSERT')?{rowCount:1,rows:[{id:'9'}]}:{rows:[]}},release(){}});
+ pool.connect=async()=>({query:async(sql,params)=>{calls.push(sql);if(sql.includes('FOR SHARE'))return {rows:[actor]};return sql.startsWith('SELECT')?{rowCount:1,rows:[{id:'1'}]}:sql.startsWith('INSERT')?{rowCount:1,rows:[{id:'9'}]}:{rows:[]}},release(){}});
  const response=await admin.request('/api/admin/schedules',{method:'POST',body:JSON.stringify({room_id:'1',kind:'class',title:'ICT',starts_at:'2026-11-02T08:00:00+05:00',ends_at:'2026-11-02T08:50:00+05:00'})});
- assert.equal(response.status,200);assert.ok(calls[1].includes('FOR UPDATE'));assert.equal(calls.at(-1),'COMMIT');
+ assert.equal(response.status,201);assert.ok(calls.some(sql=>sql.includes('FOR UPDATE')));assert.ok(calls.some(sql=>sql.includes('INSERT INTO admin_audit_log')));assert.equal(calls.at(-1),'COMMIT');
+});
+
+test('schedule save rolls back when audit fails', async()=>{
+ const calls=[];
+ pool.connect=async()=>({query:async(sql)=>{calls.push(sql);if(sql.includes('FOR SHARE'))return {rows:[actor]};if(sql.includes('admin_audit_log'))throw new Error('Audit unavailable');return {rowCount:1,rows:[{id:'9'}]};},release(){}});
+ const response=await admin.request('/api/admin/schedules',{method:'POST',body:JSON.stringify({room_id:'1',kind:'closure',title:'Repair',starts_at:'2026-11-02T08:00:00+05:00',ends_at:'2026-11-02T08:50:00+05:00'})});
+ assert.equal(response.status,500);assert.ok(calls.includes('ROLLBACK'));assert.ok(!calls.includes('COMMIT'));
+});
+test('access rules and deleted schedules are recorded in audit', async()=>{
+ for(const [path,method,body] of [['/api/admin/schedules/rules/1','PUT',{access_rules:'Staff only',student_access:false}],['/api/admin/schedules/9','DELETE',null]]){
+ const calls=[];
+ pool.connect=async()=>({query:async(sql,params)=>{calls.push({sql,params});if(sql.includes('FOR SHARE'))return {rows:[actor]};return {rowCount:1,rows:[{id:'9',room_id:'1',access_rules:'',student_access:true}]};},release(){}});
+ const response=await admin.request(path,{method,...(body?{body:JSON.stringify(body)}:{})});
+ assert.equal(response.status,method==='PUT'?200:204);assert.ok(calls.some(c=>c.sql.includes('INSERT INTO admin_audit_log')));assert.equal(calls.at(-1).sql,'COMMIT');
+ }
 });

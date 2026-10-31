@@ -5,6 +5,7 @@ import './AdminPanel.css';
 import { readSearchInterval, saveSearchInterval } from '../api/searchInterval';
 
 const labels = { schedules: 'Расписания', overview: 'Обзор', bookings: 'Бронирования', rooms: 'Помещения', users: 'Пользователи', audit: 'Журнал действий' };
+const actions = {'schedule.create':'Добавлено расписание','schedule.update':'Изменено расписание','schedule.delete':'Удалена запись расписания','room.access.update':'Изменены правила доступа','room.update':'Изменено помещение','user.update':'Изменён пользователь','booking.cancel':'Отменена бронь','user.bootstrap_admin':'Назначен администратор'};
 const statuses = { confirmed: 'Подтверждено', cancelled: 'Отменено' };
 const dateTime = value => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Qyzylorda' }) : '—';
 
@@ -102,7 +103,7 @@ function Records({ type, user }) {
       {type === 'users' && <label>Роль<select {...field('role')}><option value="">Все</option><option value="user">Пользователи</option><option value="admin">Администраторы</option></select></label>}
       <button className="admin-primary" disabled={loading}>Найти</button><button type="button" disabled={loading} onClick={() => { setLoading(true); setRevision(value => value + 1); }}>Обновить</button>
     </form>
-    {type === 'rooms' && <p className="admin-interval-note">Занятость: {interval.date} · {interval.start}–{interval.end} (Астана). Активность означает, что помещение включено; занятость учитывает брони на выбранное время.</p>}
+    {type === 'rooms' && <p className="admin-interval-note">Занятость: {interval.date} · {interval.start}–{interval.end} (Астана). Активность означает, что помещение включено; доступность учитывает занятия, брони, ограничения и полноту расписания.</p>}
     {error && <p role="alert" className="admin-error">{error}</p>}
     {loading && <p role="status">Загружаем записи…</p>}
     <div className="admin-table-scroll"><table className="admin-table"><caption>{labels[type]} · найдено: {data?.total ?? '…'}</caption><thead><tr>
@@ -114,7 +115,7 @@ function Records({ type, user }) {
       {type === 'rooms' && <><td><strong>{row.code}</strong>{row.name && <small>{row.name}</small>}</td><td>{row.floor} / {row.room_type}</td><td>{row.capacity ?? 'Не указана'}</td><td>{row.is_active ? 'Включено' : 'Отключено'}</td><td><span className={`admin-availability ${!loading && !error ? availability?.[String(row.id)] || '' : ''}`}>{loading ? 'Проверяем…' : error ? 'Не удалось проверить' : ({ available: 'Свободно', occupied: 'Занято', unavailable: 'Отключено' }[availability?.[String(row.id)]] || 'Неизвестно')}</span></td><td><button onClick={() => setEditing(row)}>Изменить</button></td></>}
       {type === 'users' && <><td><strong>{row.name}</strong><small>{row.email}</small></td><td>{row.role === 'admin' ? 'Администратор' : 'Пользователь'}</td><td>{row.is_active ? 'Активен' : 'Отключён'}</td><td>{row.microsoft_linked ? 'Microsoft ✓' : 'Не привязан'} / {row.two_factor_enabled ? '2FA ✓' : 'Без 2FA'}</td><td>{dateTime(row.last_login_at)}</td><td><button disabled={String(user.id) === row.id} onClick={() => setEditing(row)}>Изменить</button></td></>}
       {type === 'bookings' && <><td>#{row.id}<small>{row.email}</small></td><td>{row.room_code}</td><td>{row.booking_date}<small>{row.start_time.slice(0, 5)}–{row.end_time.slice(0, 5)}</small></td><td>{row.purpose}</td><td>{statuses[row.status]}{row.cancellation_reason && <small>{row.cancellation_reason}</small>}</td><td><button disabled={row.status === 'cancelled'} onClick={() => setEditing(row)}>Отменить</button></td></>}
-      {type === 'audit' && <><td>{dateTime(row.created_at)}</td><td>{row.actor_email}</td><td>{row.action}</td><td>{row.resource_type} #{row.resource_id}</td><td><details><summary>До / после</summary><pre>{JSON.stringify({ before: row.before_data, after: row.after_data }, null, 2)}</pre></details></td></>}
+      {type === 'audit' && <><td>{dateTime(row.created_at)}</td><td>{row.actor_email}</td><td>{actions[row.action] || row.action}<small>{row.action}</small></td><td>{row.resource_type} #{row.resource_id}</td><td><details><summary>До / после</summary><pre>{JSON.stringify({ before: row.before_data, after: row.after_data }, null, 2)}</pre></details></td></>}
     </tr>)}</tbody></table></div>
     {!loading && !error && rows.length === 0 && <p className="admin-muted">Нет записей по выбранным фильтрам.</p>}
     <div className="admin-pagination"><button disabled={loading || page <= 1} onClick={() => { setLoading(true); setPage(page - 1); }}>Назад</button><span>Страница {page} из {pages}</span><button disabled={loading || page >= pages} onClick={() => { setLoading(true); setPage(page + 1); }}>Далее</button></div>

@@ -9,3 +9,13 @@
 .finder-picker:has([aria-expanded="true"]){z-index:40}
 .finder-picker-popup{height:auto;max-height:min(420px,65vh);overflow-y:auto;background:#fff}
 .finder-options button{flex-shrink:0;min-height:40px}
+/* Consistent blue accents, responsive controls and contained text. */
+.finder-hero{padding:28px 16px;border-radius:24px;background:radial-gradient(ellipse at 20% 10%,#dceeff 0,transparent 65%),linear-gradient(120deg,#f4f9ff,#eef8f8);border:1px solid #e1edf6}
+.finder-search{border-top:3px solid #406fa6;box-shadow:0 10px 30px #193c6410}
+.finder-filters{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;padding:20px;background:#eef5fc;border:1px solid #dce8f3;border-radius:16px}
+.finder-filters>button{min-height:60px}.finder-summary article{border-top:3px solid #719bc1;box-shadow:0 4px 16px #142d5005}.finder-summary article:nth-child(2){border-top-color:#38a88b}.finder-summary article:nth-child(3){border-top-color:#d2838c}.finder-summary article:nth-child(4){border-top-color:#d7a55c}
+.finder-room-notice{padding:12px 14px;background:#f0f6fc;border-left:3px solid #739dc4;border-radius:8px;margin-bottom:18px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}.finder-room-notice p+p{margin-top:5px}
+.finder-room dd,.finder-room-heading h3{overflow-wrap:anywhere}.finder-room-actions>*{min-width:0;white-space:normal;text-align:center}.finder-search-bottom p svg{flex-shrink:0}
+.finder-picker-trigger>span{min-width:0;overflow-wrap:anywhere}.finder-picker-trigger svg{flex-shrink:0}
+@media(max-width:767px){.finder-filters{grid-template-columns:1fr 1fr}.finder-filters>button{grid-column:1/-1;min-height:44px}}
+@media(max-width:480px){.finder-filters{grid-template-columns:1fr}}

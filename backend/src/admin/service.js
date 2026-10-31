@@ -60,4 +60,4 @@ async function cancelBooking(actorId, id, reason) {
     await audit(client, actor, 'booking.cancel', 'booking', id, before, after); return after;
   });
 }
-module.exports = { updateUser, updateRoom, cancelBooking, audit, userFields, roomFields, fail };
+module.exports = { adminTransaction, updateUser, updateRoom, cancelBooking, audit, userFields, roomFields, fail };
