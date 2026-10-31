@@ -2,8 +2,6 @@
 function evaluate(room, events, start, end, booked = false) {
   const overlaps = events.filter(e => Date.parse(e.starts_at) < end && Date.parse(e.ends_at) > start);
   if (!room.is_active || room.student_access === false) return { availability: 'unavailable', reason: room.access_rules || 'Student access is not permitted' };
-  const closure = overlaps.find(e => e.kind === 'closure');
-  if (closure) return { availability: 'unavailable', reason: closure.title };
   const lesson = overlaps.find(e => e.kind === 'class');
   if (lesson || booked) return { availability: 'occupied', reason: lesson?.title || 'Reserved' };
   let coveredUntil = start;
@@ -11,7 +9,7 @@ function evaluate(room, events, start, end, booked = false) {
     if (Date.parse(event.starts_at) > coveredUntil) break;
     coveredUntil = Math.max(coveredUntil, Date.parse(event.ends_at));
   }
-  return coveredUntil >= end ? { availability: 'available', reason: 'Complete timetable checked' } : { availability: 'unknown', reason: 'Timetable coverage is incomplete' };
+  return coveredUntil >= end ? { availability: 'available', reason: 'Complete timetable checked' } : { availability: 'available', reason: 'Booking allowed. Timetable is incomplete; other classes may not be listed.', schedule_complete: false };
 }
 async function inspect(db, room, date, start, end) {
   const from = `${date}T${start}+05:00`, to = `${date}T${end}+05:00`;

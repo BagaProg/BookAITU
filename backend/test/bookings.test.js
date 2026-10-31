@@ -142,6 +142,6 @@ test('availability includes disabled rooms and checks overlaps across all users 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const body = await response.json();
-  assert.deepEqual(body.rooms.map(r=>r.availability), ['unknown','occupied','unavailable']);
+  assert.deepEqual(body.rooms.map(r=>r.availability), ['available','occupied','unavailable']);
   assert.ok(Number.isFinite(Date.parse(body.checkedAt)));
 });
