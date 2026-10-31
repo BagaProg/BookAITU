@@ -45,7 +45,8 @@ function mockTransaction({ missing = false, conflict = false, failure = false } 
   pool.connect = async () => ({
     query: async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes('FROM rooms')) return { rowCount: missing ? 0 : 1 };
+      if (sql.includes('FROM rooms')) return { rowCount: missing ? 0 : 1, rows: missing ? [] : [{id:'1',is_active:true,student_access:true}] };
+      if (sql.includes('FROM room_events')) return {rows:[{kind:'coverage',starts_at:'2026-10-23T00:00:00+05:00',ends_at:'2026-10-24T00:00:00+05:00'}]};
       if (sql.includes('FROM users')) return { rowCount: 1 };
       if (sql.includes('FROM bookings')) return { rowCount: conflict ? 1 : 0 };
       if (sql.includes('INSERT')) {
@@ -133,17 +134,14 @@ test('availability requires authentication and validates the requested interval 
 
 test('availability includes disabled rooms and checks overlaps across all users without exposing bookings', async () => {
   pool.query = async (sql, params) => {
-    assert.deepEqual(params, ['2026-10-26', '10:00', '11:00']);
-    assert.match(sql, /b\.start_time < \$3::time AND b\.end_time > \$2::time/);
-    assert.match(sql, /b\.status <> 'cancelled'/);
-    assert.match(sql, /WHEN NOT r\.is_active THEN 'unavailable'/);
-    assert.doesNotMatch(sql, /user_id|email|purpose/);
-    return { rows: [{ id: '1', availability: 'available' }, { id: '2', availability: 'occupied' }, { id: '3', availability: 'unavailable' }] };
+    if(sql.includes('FROM rooms')) return {rows:[{id:'1',is_active:true},{id:'2',is_active:true},{id:'3',is_active:false}]};
+    if(sql.includes('FROM room_events')) return {rows:[]};
+    return {rows:[{room_id:'2'}]};
   };
   const response = await signedIn.request('/api/rooms/availability?date=2026-10-26&start=10:00&end=11:00');
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
   const body = await response.json();
-  assert.equal(body.rooms.length, 3);
+  assert.deepEqual(body.rooms.map(r=>r.availability), ['unknown','occupied','unavailable']);
   assert.ok(Number.isFinite(Date.parse(body.checkedAt)));
 });

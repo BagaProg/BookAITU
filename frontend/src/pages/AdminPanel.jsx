@@ -1,9 +1,10 @@
+import Schedules from './Schedules';
 import { useEffect, useRef, useState } from 'react';
 import { request } from '../api/client';
 import './AdminPanel.css';
 import { readSearchInterval, saveSearchInterval } from '../api/searchInterval';
 
-const labels = { overview: 'Обзор', bookings: 'Бронирования', rooms: 'Помещения', users: 'Пользователи', audit: 'Журнал действий' };
+const labels = { schedules: 'Расписания', overview: 'Обзор', bookings: 'Бронирования', rooms: 'Помещения', users: 'Пользователи', audit: 'Журнал действий' };
 const statuses = { confirmed: 'Подтверждено', cancelled: 'Отменено' };
 const dateTime = value => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Qyzylorda' }) : '—';
 
@@ -125,6 +126,6 @@ export default function AdminPanel({ user }) {
   const [tab, setTab] = useState('overview'), [revision, setRevision] = useState(0);
   return <main className="admin-page"><header className="admin-heading"><div><p>BOOKAITU / УПРАВЛЕНИЕ</p><h1>Панель администратора</h1><span>Управление университетскими помещениями и бронированиями</span></div><button onClick={() => setRevision(value => value + 1)}>Обновить раздел</button></header>
     <nav className="admin-nav" aria-label="Разделы администрирования">{Object.entries(labels).map(([key, title]) => <button key={key} aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>{title}</button>)}</nav>
-    {tab === 'overview' ? <Overview key={revision} /> : <Records key={`${tab}-${revision}`} type={tab} user={user} />}
+    {tab === 'schedules' ? <Schedules key={revision} /> : tab === 'overview' ? <Overview key={revision} /> : <Records key={`${tab}-${revision}`} type={tab} user={user} />}
   </main>;
 }

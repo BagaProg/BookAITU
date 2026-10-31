@@ -47,7 +47,7 @@ async function updateRoom(actorId, id, input) {
     const next = { name: Object.hasOwn(input, 'name') ? input.name : before.name,
       capacity: Object.hasOwn(input, 'capacity') ? input.capacity : before.capacity, is_active: input.is_active ?? before.is_active };
     if (next.name === before.name && next.capacity === before.capacity && next.is_active === before.is_active) return before;
-    const after = (await client.query(`UPDATE rooms SET name=$1,capacity=$2,is_active=$3 WHERE id=$4 RETURNING ${roomFields}`, [next.name, next.capacity, next.is_active, id])).rows[0];
+    const after = (await client.query(`UPDATE rooms SET name=$1,capacity=$2,is_active=$3,details_updated_at=now() WHERE id=$4 RETURNING ${roomFields}`, [next.name, next.capacity, next.is_active, id])).rows[0];
     await audit(client, actor, 'room.update', 'room', id, before, after); return after;
   });
 }

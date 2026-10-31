@@ -45,7 +45,7 @@ function fakeDatabase(target, { admins = 2, auditFailure = false } = {}) {
   return calls;
 }
 test('admin routes reject anonymous and ordinary users', async () => {
-  for (const endpoint of ['dashboard', 'users', 'rooms', 'bookings', 'audit']) {
+  for (const endpoint of ['dashboard', 'users', 'rooms', 'bookings', 'audit', 'schedules', 'schedules/source', 'schedules/rooms']) {
     assert.equal((await fetch(`${base}/api/admin/${endpoint}`)).status, 401);
     assert.equal((await ordinary.request(`/api/admin/${endpoint}`)).status, 403);
   }
@@ -105,4 +105,16 @@ test('write permission flag is enforced for admin operations', async () => {
   process.env.PG_ALLOW_WRITE = 'false';
   assert.equal((await patch('/api/admin/rooms/2', { capacity: 30 })).status, 403);
   process.env.PG_ALLOW_WRITE = 'true';
+});
+
+test('schedule writes validate input and require CSRF', async()=>{
+ const path='/api/admin/schedules';
+ assert.equal((await admin.request(path,{method:'POST',headers:{'X-CSRF-Token':'wrong'},body:JSON.stringify({})})).status,403);
+ assert.equal((await admin.request(path,{method:'POST',body:JSON.stringify({room_id:'1',kind:'class',title:'Test',starts_at:'bad',ends_at:'bad'})})).status,400);
+});
+test('schedule creation locks the room and saves an explicit interval', async()=>{
+ const calls=[];
+ pool.connect=async()=>({query:async(sql,params)=>{calls.push(sql);return sql.startsWith('SELECT')?{rowCount:1,rows:[{id:'1'}]}:sql.startsWith('INSERT')?{rowCount:1,rows:[{id:'9'}]}:{rows:[]}},release(){}});
+ const response=await admin.request('/api/admin/schedules',{method:'POST',body:JSON.stringify({room_id:'1',kind:'class',title:'ICT',starts_at:'2026-11-02T08:00:00+05:00',ends_at:'2026-11-02T08:50:00+05:00'})});
+ assert.equal(response.status,200);assert.ok(calls[1].includes('FOR UPDATE'));assert.equal(calls.at(-1),'COMMIT');
 });

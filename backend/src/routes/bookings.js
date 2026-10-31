@@ -32,12 +32,14 @@ router.post('/', allowWrite, async (req, res) => {
   try {
     await client.query('BEGIN');
     // Lock the room so concurrent API requests cannot both reserve the same slot.
-    const room = await client.query('SELECT id FROM rooms WHERE id = $1 AND is_active FOR UPDATE', [room_id]);
+    const room = await client.query('SELECT * FROM rooms WHERE id = $1 AND is_active FOR UPDATE', [room_id]);
     const user = await client.query('SELECT id FROM users WHERE id = $1 AND is_active', [user_id]);
     if (!room.rowCount || !user.rowCount) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'User or room not found' });
     }
+    const availability = await require('../availability').inspect(client, room.rows[0], booking_date, start_time, end_time);
+    if (availability.availability !== 'available') { await client.query('ROLLBACK'); return res.status(409).json({ error: availability.reason }); }
     const overlap = await client.query(
       `SELECT id FROM bookings WHERE room_id = $1 AND booking_date = $2
        AND status <> 'cancelled' AND start_time < $4 AND end_time > $3 LIMIT 1`,

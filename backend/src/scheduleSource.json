@@ -1,0 +1,122 @@
+{
+  "academic_week": 8,
+  "calendar_dates_confirmed": false,
+  "complete": false,
+  "note": "One group only. Week dates absent. Some lessons cropped. Null weekday: day header absent. Online classes excluded. Capacity unknown.",
+  "entries": [
+    {
+      "weekday": 1,
+      "room_code": "C1.1.357K",
+      "start": "08:00",
+      "end": "08:50"
+    },
+    {
+      "weekday": 1,
+      "room_code": "C1.1.357K",
+      "start": "09:00",
+      "end": "09:50"
+    },
+    {
+      "weekday": 1,
+      "room_code": "C1.1.253P",
+      "start": "10:00",
+      "end": "10:50"
+    },
+    {
+      "weekday": 1,
+      "room_code": "C1.1.253P",
+      "start": "11:00",
+      "end": "11:50"
+    },
+    {
+      "weekday": 2,
+      "room_code": "C1.1.326",
+      "start": "10:00",
+      "end": "10:50"
+    },
+    {
+      "weekday": 2,
+      "room_code": "C1.1.326",
+      "start": "11:00",
+      "end": "11:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.3.361",
+      "start": "08:00",
+      "end": "08:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.3.361",
+      "start": "09:00",
+      "end": "09:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.3.365L",
+      "start": "10:00",
+      "end": "10:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.3.365L",
+      "start": "11:00",
+      "end": "11:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.1.352K",
+      "start": "12:00",
+      "end": "12:50"
+    },
+    {
+      "weekday": 3,
+      "room_code": "C1.1.352K",
+      "start": "13:05",
+      "end": "13:55"
+    },
+    {
+      "weekday": 4,
+      "room_code": "C1.3.232P",
+      "start": "09:00",
+      "end": "09:50"
+    },
+    {
+      "weekday": 4,
+      "room_code": "C1.1.245K",
+      "start": "10:00",
+      "end": "10:50"
+    },
+    {
+      "weekday": null,
+      "room_code": "C1.3.234L",
+      "start": "09:00",
+      "end": "09:50"
+    },
+    {
+      "weekday": null,
+      "room_code": "C1.2.227P",
+      "start": "11:00",
+      "end": "11:50"
+    },
+    {
+      "weekday": null,
+      "room_code": "C1.2.227P",
+      "start": "12:00",
+      "end": "12:50"
+    },
+    {
+      "weekday": 6,
+      "room_code": "C1.1.334L",
+      "start": "08:00",
+      "end": "08:50"
+    },
+    {
+      "weekday": 6,
+      "room_code": "C1.1.253P",
+      "start": "09:00",
+      "end": "09:50"
+    }
+  ]
+}

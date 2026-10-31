@@ -13,7 +13,7 @@ function createApp(options = {}) {
   if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 
   app.use(helmet());
-  app.use(cors({ origin: auth.config.origin, credentials: true, methods: ['GET', 'POST', 'PATCH', 'DELETE'], allowedHeaders: ['Content-Type', 'X-CSRF-Token'] }));
+  app.use(cors({ origin: auth.config.origin, credentials: true, methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], allowedHeaders: ['Content-Type', 'X-CSRF-Token'] }));
   app.use(express.json({ limit: '16kb' }));
   app.get('/healthz', (req, res) => res.json({ status: 'ok' }));
   app.use('/api', rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }));
@@ -21,6 +21,7 @@ function createApp(options = {}) {
   app.use('/api', auth.sessionMiddleware);
   app.use('/api/auth', auth.router);
   app.use('/api', auth.requireAuth, auth.csrf);
+  app.use('/api/admin/schedules', auth.requireAdmin, require('./routes/schedules'));
   app.use('/api/admin', auth.requireAdmin, require('./routes/admin'));
   app.use('/api/users', auth.requireAdmin, require('./routes/users'));
   app.use('/api/rooms', require('./routes/rooms'));
