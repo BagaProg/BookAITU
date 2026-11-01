@@ -10,7 +10,8 @@ export async function request(path, options) {
     const body = await response.json().catch(() => ({}));
     const error = new Error(body.error || `Request failed (${response.status})`);
     error.status = response.status;
-    if (response.status === 401) window.dispatchEvent(new Event('session-expired'));
+    error.code = body.code;
+    if (response.status === 401 && (body.code === 'AUTH_REQUIRED' || body.code === 'MICROSOFT_LOGIN_REQUIRED' || !body.code)) window.dispatchEvent(new Event('session-expired'));
     throw error;
   }
   if (response.status === 204) return undefined;

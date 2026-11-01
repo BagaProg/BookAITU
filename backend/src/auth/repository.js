@@ -43,12 +43,16 @@ function createRepository(config) {
         if (user.second_factor_locked_until && new Date(user.second_factor_locked_until).getTime() > Date.now()) return { ok: false, code: 'SECOND_FACTOR_LOCKED', status: 429 };
         if (input.enrollmentSecret && user.two_factor_enabled) throw problem('ALREADY_ENROLLED', 409);
         if (!input.enrollmentSecret && !user.two_factor_enabled) throw problem('ENROLLMENT_REQUIRED', 409);
-        const secret = input.enrollmentSecret || decrypt(user.two_factor_secret, config.key);
+        const code = typeof input.code === 'string' ? input.code.replace(/[\s\u200B-\u200D\uFEFF]/g, '') : '';
+        let secret = input.enrollmentSecret;
         let match = { valid: false };
         let remaining = user.backup_codes || [];
-        if (/^\d{6}$/.test(input.code)) match = await verifyTotp(secret, input.code, user.two_factor_last_step);
-        else if (!input.enrollmentSecret && /^[a-f0-9\s-]{32,80}$/i.test(input.code)) {
-          const hash = hashRecovery(input.code);
+        if (/^\d{6}$/.test(code)) {
+          secret ||= decrypt(user.two_factor_secret, config.key);
+          match = await verifyTotp(secret, code, user.two_factor_last_step);
+        }
+        else if (!input.enrollmentSecret && /^[a-f0-9\s-]{32,80}$/i.test(code)) {
+          const hash = hashRecovery(code);
           const index = remaining.findIndex(value => equal(value, hash));
           if (index >= 0) { match = { valid: true }; remaining = remaining.filter((_, i) => i !== index); }
         }

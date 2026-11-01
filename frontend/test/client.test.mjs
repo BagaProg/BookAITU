@@ -40,3 +40,10 @@ test('API uses credentials, rotates CSRF, preserves errors and handles logout', 
     assert.deepEqual(events, ['session-expired']);
   } finally { globalThis.fetch = originalFetch; globalThis.window = originalWindow; }
 });
+
+test('invalid second factor preserves the challenge instead of expiring the session',async()=>{
+ const oldFetch=globalThis.fetch,oldWindow=globalThis.window;const events=[];
+ globalThis.window={dispatchEvent:event=>events.push(event.type)};
+ globalThis.fetch=async()=>new Response(JSON.stringify({error:'Invalid code',code:'INVALID_SECOND_FACTOR'}),{status:401});
+ try{await assert.rejects(request('/api/auth/2fa/verify',{method:'POST',body:'{}'}),e=>e.code==='INVALID_SECOND_FACTOR');assert.deepEqual(events,[])}finally{globalThis.fetch=oldFetch;globalThis.window=oldWindow}
+});

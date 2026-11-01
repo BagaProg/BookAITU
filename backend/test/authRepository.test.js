@@ -81,3 +81,19 @@ test('matching an email never links a Microsoft identity to a legacy account', a
   const repo = createRepository({ key });
   await assert.rejects(repo.resolveIdentity({ microsoftId: 'new-identity', email: 'existing@astanait.edu.kz', name: 'Member' }), { code: 'ACCOUNT_LINK_REQUIRED' });
 });
+
+test('pasted TOTP accepts spaces and invisible separators while still preventing replay', async()=>{
+ const user=initialUser(),secret=otp.generateSecret();
+ Object.assign(user,{two_factor_enabled:true,two_factor_secret:encrypt(secret,key),backup_codes:[]});
+ const {repo}=database(user);const code=await otp.generate({secret});
+ const pasted=' '+code.slice(0,3)+'\u200b '+code.slice(3)+'\n';
+ assert.equal((await repo.secondFactor('1',{code:pasted})).ok,true);
+ assert.equal((await repo.secondFactor('1',{code:pasted})).ok,false);
+});
+test('recovery codes remain usable even if the authenticator secret cannot be decrypted',async()=>{
+ const user=initialUser(),recovery=recoveryCodes();
+ Object.assign(user,{two_factor_enabled:true,two_factor_secret:'unreadable-secret',backup_codes:recovery.hashes});
+ const {repo}=database(user);
+ assert.equal((await repo.secondFactor('1',{code:recovery.codes[0].toUpperCase()})).ok,true);
+ assert.equal((await repo.secondFactor('1',{code:recovery.codes[0]})).ok,false);
+});

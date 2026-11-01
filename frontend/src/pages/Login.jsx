@@ -44,7 +44,7 @@ export default function Login() {
   }, []);
   async function act(work) {
     setBusy(true); setError('');
-    try { await work(); } catch (err) { setError(err.message); } finally { setBusy(false); }
+    try { await work(); } catch (err) { setError(({ INVALID_SECOND_FACTOR: 'Код не подошёл или уже использован. Введите новый код из записи BookAITU в приложении. Проверьте автоматическую настройку времени на телефоне.', SECOND_FACTOR_LOCKED: 'Слишком много неверных попыток. Подождите 15 минут перед следующей попыткой.', MICROSOFT_LOGIN_REQUIRED: 'Время подтверждения истекло. Войдите через Microsoft ещё раз.' })[err.code] || err.message); } finally { setBusy(false); }
   }
   const logout = () => act(async () => {
     await request('/api/auth/logout', { method: 'POST' });
@@ -77,6 +77,7 @@ export default function Login() {
       {setup && <><img className="auth-qr" src={setup.qrCode} alt="QR-код настройки BookAITU в приложении-аутентификаторе" /><p className="auth-small">Или введите ключ вручную:</p><code className="auth-secret">{setup.secret}</code></>}
     </>}
     {(session?.status === 'two_factor_required' || (session?.status === 'enrollment_required' && setup)) && <form onSubmit={submit}>
+      <p className="auth-small">Используйте код из записи BookAITU, созданной через QR-код этого сайта. Код входа Microsoft не подходит. Резервный код — один из десяти кодов, выданных BookAITU при настройке.</p>
       <label htmlFor="otp">{session.status === 'enrollment_required' ? 'Шестизначный код из приложения' : 'Код из приложения или резервный код'}</label>
       <input id="otp" autoComplete="one-time-code" inputMode={session.status === 'enrollment_required' ? 'numeric' : 'text'} value={code} maxLength={80} onChange={event => setCode(event.target.value)} required />
       <button className="auth-primary" disabled={busy}>{busy ? 'Проверяем…' : 'Подтвердить вход'}</button>
