@@ -1,3 +1,4 @@
+import { playBookingSound } from '../bookingSound'
 import { useEffect, useRef, useState } from 'react'
 import { MapPin, SlidersHorizontal, Search, Info } from 'lucide-react'
 import { request } from '../api/client'
@@ -22,7 +23,7 @@ function RoomCard({ room, slot, checkedAt, index }) {
     <div className="finder-photo"><img src={`/media/optimized/${photo}-800.webp`} srcSet={`/media/optimized/${photo}-480.webp 480w, /media/optimized/${photo}-800.webp ${photo === 'lecture-hall' ? 705 : 800}w`} sizes="(max-width: 767px) 100vw, 50vw" width="800" height="533" loading={index < 2 ? 'eager' : 'lazy'} alt="Example of an AITU learning space" /><span>AITU · illustrative photo</span></div>
     <div className="finder-room-body"><div className="finder-room-heading"><div><p>{type}</p><h3>{room.name || room.code}</h3></div><span className={`finder-badge ${status}`}>{statusNames[status]}</span></div>
       <dl><div><dt>Block</dt><dd>{room.block || '—'}</dd></div><div><dt>Floor</dt><dd>{room.floor ?? '—'}</dd></div><div className="finder-wide"><dt>Next known class</dt><dd>{room.next_class ? new Date(room.next_class.starts_at).toLocaleString('en-GB', {timeZone:'Asia/Qyzylorda'}) : 'No known class'}</dd></div><div><dt>Capacity</dt><dd>{room.capacity ?? 'Not provided'}</dd></div><div><dt>Last updated</dt><dd>{room.schedule_updated_at ? new Date(room.schedule_updated_at).toLocaleString('en-GB', {timeZone:'Asia/Qyzylorda'}) : 'Not provided'}</dd></div></dl>
-      <div className="finder-room-notice"><p>{room.reason}</p>{room.access_rules && room.access_rules !== room.reason && <p>{room.access_rules}</p>}</div><div className="finder-room-actions"><Button to={target} variant="secondary">View details</Button>{status === 'available' && !historical ? <Button to={target}>Book room</Button> : <Button variant="disabled">{historical ? 'Past date' : status === 'occupied' ? 'Already booked' : 'Booking not allowed'}</Button>}</div>
+      <div className="finder-room-notice"><p>{room.reason}</p>{room.access_rules && room.access_rules !== room.reason && <p>{room.access_rules}</p>}</div><div className="finder-room-actions"><Button to={target} variant="secondary">View details</Button>{status === 'available' && !historical ? <Button onClick={playBookingSound} to={target}>Book room</Button> : <Button variant="disabled">{historical ? 'Past date' : status === 'occupied' ? 'Already booked' : 'Booking not allowed'}</Button>}</div>
     </div>
   </article>
 }
