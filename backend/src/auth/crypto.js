@@ -16,14 +16,9 @@ function decrypt(value, key) {
   decipher.setAuthTag(Buffer.from(tag, 'base64url'));
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64url')), decipher.final()]).toString('utf8');
 }
-const hashRecovery = value => crypto.createHash('sha256').update(String(value).replace(/[\s-]/g, '').toLowerCase()).digest('hex');
-function recoveryCodes() {
-  const codes = Array.from({ length: 10 }, () => crypto.randomBytes(16).toString('hex').match(/.{4}/g).join('-'));
-  return { codes, hashes: codes.map(hashRecovery) };
-}
 async function verifyTotp(secret, code, lastStep) {
   if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return { valid: false };
   return otp.verify({ secret, token: code, epochTolerance: 30,
     ...(lastStep == null ? {} : { afterTimeStep: Number(lastStep) }) });
 }
-module.exports = { encrypt, decrypt, hashRecovery, recoveryCodes, verifyTotp, generateSecret: otp.generateSecret, generateURI: otp.generateURI };
+module.exports = { encrypt, decrypt, verifyTotp, generateSecret: otp.generateSecret, generateURI: otp.generateURI };

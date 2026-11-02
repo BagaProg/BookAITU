@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const otp = require('otplib');
 const pool = require('../src/db');
 const { createRepository } = require('../src/auth/repository');
-const { encrypt, decrypt, recoveryCodes } = require('../src/auth/crypto');
+const { encrypt, decrypt } = require('../src/auth/crypto');
 
 const originalConnect = pool.connect;
 after(async () => { pool.connect = originalConnect; await pool.end(); });
@@ -19,7 +19,7 @@ function database(user) {
         user.second_factor_failures = params[0]; user.second_factor_locked_until = params[1]; return { rows: [] };
       }
       if (sql.startsWith('UPDATE users SET two_factor_enabled')) {
-        Object.assign(user, { two_factor_enabled: true, two_factor_secret: params[0], backup_codes: JSON.parse(params[1]), two_factor_last_step: params[2], second_factor_failures: 0, second_factor_locked_until: null });
+        Object.assign(user, { two_factor_enabled: true, two_factor_secret: params[0], backup_codes: null, two_factor_last_step: params[1], second_factor_failures: 0, second_factor_locked_until: null });
         return { rows: [{ ...user }] };
       }
       return { rows: [] };
@@ -32,28 +32,30 @@ const initialUser = () => ({ id: '1', email: 'member@astanait.edu.kz', name: 'Me
   microsoft_id: 'verified-tenant:object-id', two_factor_enabled: false, two_factor_secret: null, backup_codes: null,
   two_factor_last_step: null, second_factor_failures: 0, second_factor_locked_until: null });
 
-test('enrollment saves an encrypted secret and hashed recovery codes under a row lock', async () => {
+test('enrollment saves an encrypted secret without recovery codes under a row lock', async () => {
   const user = initialUser(), secret = otp.generateSecret();
   const { repo, calls } = database(user);
   const result = await repo.secondFactor('1', { enrollmentSecret: secret, code: await otp.generate({ secret }) });
-  assert.equal(result.ok, true); assert.equal(result.recoveryCodes.length, 10);
+  assert.equal(result.ok, true); assert.ok(!('recoveryCodes' in result));
   assert.equal(decrypt(user.two_factor_secret, key), secret);
-  assert.ok(user.backup_codes.every(code => !result.recoveryCodes.includes(code)));
+  assert.equal(user.backup_codes, null);
   assert.ok(calls.find(c => c.sql.startsWith('SELECT *')).sql.endsWith('FOR UPDATE'));
   assert.ok(calls.some(c => c.sql === 'COMMIT'));
   assert.ok(!('two_factor_secret' in result.user));
 });
-test('a recovery code can be consumed only once and used TOTP is rejected', async () => {
-  const user = initialUser(), secret = otp.generateSecret(), recovery = recoveryCodes();
-  Object.assign(user, { two_factor_enabled: true, two_factor_secret: encrypt(secret, key), backup_codes: recovery.hashes });
+test('legacy recovery codes are rejected and TOTP still prevents replay', async () => {
+  const user = initialUser(), secret = otp.generateSecret();
+  const legacyCode = 'abcd-1234-abcd-1234-abcd-1234-abcd-1234';
+  Object.assign(user, { two_factor_enabled: true, two_factor_secret: encrypt(secret, key),
+    backup_codes: [crypto.createHash('sha256').update(legacyCode.replace(/-/g, '')).digest('hex')] });
   const { repo } = database(user);
-  assert.equal((await repo.secondFactor('1', { code: recovery.codes[0] })).ok, true);
-  assert.equal(user.backup_codes.length, 9);
-  assert.equal((await repo.secondFactor('1', { code: recovery.codes[0] })).ok, false);
+  assert.equal((await repo.secondFactor('1', { code: legacyCode })).ok, false);
   const code = await otp.generate({ secret });
   assert.equal((await repo.secondFactor('1', { code })).ok, true);
+  assert.equal(user.backup_codes, null);
   assert.equal((await repo.secondFactor('1', { code })).ok, false);
 });
+
 test('five failures persist a per-account lock even across new challenges', async () => {
   const user = initialUser(), secret = otp.generateSecret();
   Object.assign(user, { two_factor_enabled: true, two_factor_secret: encrypt(secret, key), backup_codes: [] });
@@ -89,11 +91,4 @@ test('pasted TOTP accepts spaces and invisible separators while still preventing
  const pasted=' '+code.slice(0,3)+'\u200b '+code.slice(3)+'\n';
  assert.equal((await repo.secondFactor('1',{code:pasted})).ok,true);
  assert.equal((await repo.secondFactor('1',{code:pasted})).ok,false);
-});
-test('recovery codes remain usable even if the authenticator secret cannot be decrypted',async()=>{
- const user=initialUser(),recovery=recoveryCodes();
- Object.assign(user,{two_factor_enabled:true,two_factor_secret:'unreadable-secret',backup_codes:recovery.hashes});
- const {repo}=database(user);
- assert.equal((await repo.secondFactor('1',{code:recovery.codes[0].toUpperCase()})).ok,true);
- assert.equal((await repo.secondFactor('1',{code:recovery.codes[0]})).ok,false);
 });

@@ -35,6 +35,7 @@ function fakeDatabase(target, { admins = 2, auditFailure = false } = {}) {
       if (sql.includes('FOR SHARE')) return { rows: [actor] };
       if (sql.includes('FOR UPDATE')) return { rows: target ? [{ ...target }] : [] };
       if (sql.includes('SELECT count(*)')) return { rows: [{ count: admins }] };
+      if (sql.startsWith('UPDATE users SET two_factor_enabled=false')) return { rows: [{ ...target, two_factor_enabled: false }] };
       if (sql.startsWith('UPDATE users')) return { rows: [{ ...target, role: params[0], is_active: params[1] }] };
       if (sql.startsWith('UPDATE rooms')) return { rows: [{ ...target, name: params[0], capacity: params[1], is_active: params[2] }] };
       if (sql.startsWith('UPDATE bookings')) return { rows: [{ ...target, status: 'cancelled', cancellation_reason: params[1] }] };
@@ -100,6 +101,44 @@ test('administrator cancellation retains booking and reason, repeat is a no-op',
   const repeated = fakeDatabase({ ...booking, status: 'cancelled' });
   await service.cancelBooking('1', '2', 'Repeat');
   assert.ok(!repeated.some(call => call.sql.startsWith('UPDATE bookings')));
+});
+
+test('second factor reset revokes sessions, preserves role and audits without secrets', async () => {
+  const calls = fakeDatabase({ ...actor, id: '2' });
+  const response = await admin.request('/api/admin/users/2/reset-2fa', { method: 'POST' });
+  assert.equal(response.status, 200);
+  const user = await response.json();
+  assert.equal(user.two_factor_enabled, false); assert.equal(user.role, 'admin');
+  const update = calls.find(call => call.sql.startsWith('UPDATE users SET two_factor_enabled=false'));
+  for (const field of ['two_factor_secret=NULL', 'backup_codes=NULL', 'two_factor_last_step=NULL', 'second_factor_failures=0', 'second_factor_locked_until=NULL']) assert.ok(update.sql.includes(field));
+  assert.deepEqual(update.params, ['2']);
+  assert.ok(calls.some(call => call.sql.startsWith('DELETE FROM auth_sessions') && call.params[0] === '2'));
+  const event = calls.find(call => call.sql.includes('INSERT INTO admin_audit_log'));
+  assert.equal(event.params[2], 'user.reset_2fa');
+  assert.ok(!event.params[6].includes('two_factor_secret'));
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
+});
+
+test('second factor reset enforces access, CSRF, write flag and target eligibility', async () => {
+  const path = '/api/admin/users/2/reset-2fa';
+  assert.equal((await fetch(`${base}${path}`, { method: 'POST' })).status, 401);
+  assert.equal((await ordinary.request(path, { method: 'POST' })).status, 403);
+  assert.equal((await admin.request(path, { method: 'POST', headers: { 'X-CSRF-Token': 'wrong' } })).status, 403);
+  process.env.PG_ALLOW_WRITE = 'false';
+  try { assert.equal((await admin.request(path, { method: 'POST' })).status, 403); }
+  finally { process.env.PG_ALLOW_WRITE = 'true'; }
+  assert.equal((await admin.request('/api/admin/users/1/reset-2fa', { method: 'POST' })).status, 409);
+  for (const target of [null, { ...actor, id: '2', is_active: false }, { ...actor, id: '2', microsoft_linked: false }]) {
+    fakeDatabase(target);
+    assert.equal((await admin.request(path, { method: 'POST' })).status, target ? 409 : 404);
+  }
+});
+
+test('second factor reset rolls back if audit fails', async () => {
+  const calls = fakeDatabase({ ...actor, id: '2' }, { auditFailure: true });
+  await assert.rejects(service.resetSecondFactor('1', '2'));
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  assert.ok(!calls.some(call => call.sql === 'COMMIT'));
 });
 test('write permission flag is enforced for admin operations', async () => {
   process.env.PG_ALLOW_WRITE = 'false';

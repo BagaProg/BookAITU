@@ -60,6 +60,10 @@ function createAuth(options = {}) {
   });
   router.get('/microsoft/callback', unavailable, async (req, res) => {
     const oauth = req.session?.oauth;
+    // A stale callback must not consume a newer login attempt or destroy a completed login.
+    if (!oauth || !equal(req.query.state, oauth.state)) {
+      return res.redirect(req.session?.userId || req.session?.pending ? config.origin : `${config.origin}/?auth_error=MICROSOFT_LOGIN_FAILED`);
+    }
     delete req.session.oauth;
     await save(req);
     try {
@@ -86,11 +90,13 @@ function createAuth(options = {}) {
   router.post('/2fa/setup', unavailable, csrf, pending, factorLimit, async (req, res) => {
     const user = await repo.findUser(req.session.pending.userId);
     if (!user) return res.status(403).json({ error: 'Account is unavailable' });
-    if (user.two_factor_enabled) return res.status(409).json({ error: 'Second factor is already configured' });
+    if (user.two_factor_enabled) return res.status(409).json({ error: 'Second factor is already configured', code: 'ALREADY_ENROLLED' });
     if (!req.session.enrollment) req.session.enrollment = encrypt(generateSecret(), config.key);
     const secret = decrypt(req.session.enrollment, config.key);
     const uri = generateURI({ issuer: 'BookAITU', label: user.email, secret });
-    res.json({ secret, qrCode: await QRCode.toDataURL(uri, { width: 240, margin: 2 }) });
+    const qrCode = await QRCode.toDataURL(uri, { width: 240, margin: 2 });
+    await save(req);
+    res.json({ qrCode });
   });
   async function finishFactor(req, res, enrollment) {
     const code = req.body?.code;
@@ -102,7 +108,7 @@ function createAuth(options = {}) {
     req.session.userId = result.user.id; req.session.authenticatedAt = Date.now(); req.session.csrf = token();
     req.session.cookie.maxAge = config.sessionMs;
     await save(req);
-    res.json({ status: 'authenticated', user: result.user, csrfToken: req.session.csrf, ...(result.recoveryCodes ? { recoveryCodes: result.recoveryCodes } : {}) });
+    res.json({ status: 'authenticated', user: result.user, csrfToken: req.session.csrf });
   }
   router.post('/2fa/confirm', unavailable, csrf, pending, factorLimit, (req, res) => finishFactor(req, res, true));
   router.post('/2fa/verify', unavailable, csrf, pending, factorLimit, (req, res) => finishFactor(req, res, false));

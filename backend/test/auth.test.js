@@ -6,7 +6,7 @@ const pool = require('../src/db');
 const { createApp } = require('../src/server');
 const { authHarness, browser } = require('./helpers/authHarness');
 const { validateIdentity, getConfig } = require('../src/auth/config');
-const { encrypt, decrypt, recoveryCodes, hashRecovery, verifyTotp } = require('../src/auth/crypto');
+const { encrypt, decrypt, verifyTotp } = require('../src/auth/crypto');
 
 after(() => pool.end());
 async function withApp(options, work) {
@@ -35,14 +35,11 @@ test('identity failures distinguish missing Entra configuration from guests with
     [{ preferred_username: 'private@example.com' }, 'UNIVERSITY_DOMAIN_REQUIRED'],
   ]) assert.throws(() => validateIdentity({ ...h.claims, ...change }, h.options.config), { code: 'UNIVERSITY_ACCOUNT_REQUIRED', reason });
 });
-test('secrets are authenticated ciphertext and recovery codes are high-entropy hashes', () => {
+test('secrets are authenticated ciphertext', () => {
   const key = crypto.randomBytes(32), secret = otp.generateSecret();
   const encrypted = encrypt(secret, key);
   assert.ok(!encrypted.includes(secret)); assert.equal(decrypt(encrypted, key), secret);
   assert.throws(() => decrypt(encrypted, crypto.randomBytes(32)));
-  const recovery = recoveryCodes();
-  assert.equal(new Set(recovery.codes).size, 10);
-  assert.ok(recovery.codes.every((code, i) => hashRecovery(code) === recovery.hashes[i] && !recovery.hashes.includes(code)));
 });
 test('TOTP verifies correct codes, rejects invalid codes and prevents replay', async () => {
   const secret = otp.generateSecret(); const code = await otp.generate({ secret });
@@ -73,9 +70,9 @@ test('enrollment produces a QR code and elevates session only after confirmation
     await client.microsoft();
     assert.equal((await client.status()).status, 'enrollment_required');
     const setup = await (await client.request('/api/auth/2fa/setup', { method: 'POST' })).json();
-    assert.ok(setup.secret); assert.ok(setup.qrCode.startsWith('data:image/png;base64,'));
+    assert.ok(!('secret' in setup)); assert.ok(setup.qrCode.startsWith('data:image/png;base64,'));
     const result = await (await client.request('/api/auth/2fa/confirm', { method: 'POST', body: '{"code":"123456"}' })).json();
-    assert.equal(result.status, 'authenticated'); assert.equal(result.recoveryCodes.length, 1);
+    assert.equal(result.status, 'authenticated'); assert.ok(!('recoveryCodes' in result));
     const status = await client.status(); assert.equal(status.status, 'authenticated');
     assert.ok(!('two_factor_secret' in status.user));
     await client.request('/api/auth/logout', { method: 'POST' });
@@ -93,6 +90,36 @@ test('wrong OAuth state and guest identity cannot create a pending login', async
     const guest = await client.microsoft();
     assert.ok(guest.headers.get('location').includes('UNIVERSITY_ACCOUNT_REQUIRED'));
     assert.equal((await client.status()).status, 'anonymous');
+  });
+});
+
+test('setup survives reload, exposes only QR and reports enrollment from another session', async () => {
+  const h = authHarness({ enabled: false });
+  await withApp(h.options, async client => {
+    await client.microsoft(); await client.status();
+    const first = await (await client.request('/api/auth/2fa/setup', { method: 'POST' })).json();
+    await client.status();
+    const repeated = await (await client.request('/api/auth/2fa/setup', { method: 'POST' })).json();
+    assert.deepEqual(Object.keys(first), ['qrCode']);
+    assert.equal(first.qrCode, repeated.qrCode);
+    h.user.two_factor_enabled = true;
+    const conflict = await client.request('/api/auth/2fa/setup', { method: 'POST' });
+    assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).code, 'ALREADY_ENROLLED');
+    assert.equal((await client.status()).status, 'two_factor_required');
+  });
+});
+
+test('stale Microsoft callback preserves the current login and authenticated session', async () => {
+  const h = authHarness();
+  await withApp(h.options, async client => {
+    await client.request('/api/auth/microsoft');
+    await client.request('/api/auth/microsoft/callback?state=stale&code=old');
+    await client.request('/api/auth/microsoft/callback?state=test-state&code=current');
+    assert.equal((await client.status()).status, 'two_factor_required');
+    await client.request('/api/auth/2fa/verify', { method: 'POST', body: '{"code":"123456"}' });
+    await client.request('/api/auth/microsoft/callback?state=test-state&code=current');
+    assert.equal((await client.status()).status, 'authenticated');
   });
 });
 

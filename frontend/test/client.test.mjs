@@ -3,7 +3,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = (await readFile(new URL('../src/api/client.js', import.meta.url), 'utf8')).replaceAll('import.meta.env.VITE_API_URL', 'undefined').replaceAll('import.meta.env.PROD', 'false');
-const { API, request } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { API, request, readSession } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+
+test('concurrent session reads share cookie creation and later reads refresh', async () => {
+  const previous = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response(JSON.stringify({ status: 'anonymous', csrfToken: 'test' })); };
+  try {
+    const first = readSession(), second = readSession();
+    assert.equal(first, second);
+    await Promise.all([first, second]);
+    assert.equal(calls, 1);
+    await readSession(); assert.equal(calls, 2);
+  } finally { globalThis.fetch = previous; }
+});
 
 test('production defaults to the same origin for API requests', async () => {
   const production = source.replace("(false ? ''", "(true ? ''");

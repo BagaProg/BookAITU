@@ -40,6 +40,20 @@ async function updateUser(actorId, id, input) {
     return safeUser(after);
   });
 }
+async function resetSecondFactor(actorId, id) {
+  return adminTransaction(actorId, async (client, actor) => {
+    if (String(id) === String(actorId)) throw fail(409, 'Ask another administrator to reset your second factor');
+    const before = (await client.query(`SELECT ${userFields} FROM users WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+    if (!before) throw fail(404, 'User not found');
+    if (!before.is_active || !before.microsoft_linked) throw fail(409, 'An active Microsoft account is required');
+    const after = (await client.query(`UPDATE users SET two_factor_enabled=false,two_factor_secret=NULL,
+      backup_codes=NULL,two_factor_last_step=NULL,second_factor_failures=0,second_factor_locked_until=NULL
+      WHERE id=$1 RETURNING ${userFields}`, [id])).rows[0];
+    await client.query("DELETE FROM auth_sessions WHERE sess->>'userId'=$1 OR sess->'pending'->>'userId'=$1", [String(id)]);
+    await audit(client, actor, 'user.reset_2fa', 'user', id, before, after);
+    return safeUser(after);
+  });
+}
 async function updateRoom(actorId, id, input) {
   return adminTransaction(actorId, async (client, actor) => {
     const before = (await client.query(`SELECT ${roomFields} FROM rooms WHERE id=$1 FOR UPDATE`, [id])).rows[0];
@@ -60,4 +74,4 @@ async function cancelBooking(actorId, id, reason) {
     await audit(client, actor, 'booking.cancel', 'booking', id, before, after); return after;
   });
 }
-module.exports = { adminTransaction, updateUser, updateRoom, cancelBooking, audit, userFields, roomFields, fail };
+module.exports = { adminTransaction, updateUser, resetSecondFactor, updateRoom, cancelBooking, audit, userFields, roomFields, fail };

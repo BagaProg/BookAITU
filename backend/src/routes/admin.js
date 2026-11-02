@@ -78,6 +78,9 @@ router.patch('/users/:id', async (req, res) => {
   if (Object.hasOwn(req.body, 'is_active') && typeof req.body.is_active !== 'boolean') invalid('is_active must be boolean');
   res.json(await service.updateUser(req.user.id, req.params.id, req.body));
 });
+router.post('/users/:id/reset-2fa', async (req, res) => {
+  res.json(await service.resetSecondFactor(req.user.id, req.params.id));
+});
 router.patch('/rooms/:id', async (req, res) => {
   body(req.body, ['name', 'capacity', 'is_active']); const input = { ...req.body };
   if (Object.hasOwn(input, 'name') && input.name !== null) { if (typeof input.name !== 'string' || input.name.trim().length > 100) invalid('Invalid name'); input.name = input.name.trim() || null; }

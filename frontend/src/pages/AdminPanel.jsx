@@ -6,7 +6,7 @@ import './AdminPanel.css';
 import { readSearchInterval, saveSearchInterval } from '../api/searchInterval';
 
 const labels = { schedules: 'Расписания', overview: 'Обзор', bookings: 'Бронирования', rooms: 'Помещения', users: 'Пользователи', audit: 'Журнал действий' };
-const actions = {'schedule.create':'Добавлено расписание','schedule.update':'Изменено расписание','schedule.delete':'Удалена запись расписания','room.access.update':'Изменены правила доступа','room.update':'Изменено помещение','user.update':'Изменён пользователь','booking.cancel':'Отменена бронь','user.bootstrap_admin':'Назначен администратор'};
+const actions = {'schedule.create':'Добавлено расписание','schedule.update':'Изменено расписание','schedule.delete':'Удалена запись расписания','room.access.update':'Изменены правила доступа','room.update':'Изменено помещение','user.update':'Изменён пользователь','user.reset_2fa':'Сброшен второй фактор','booking.cancel':'Отменена бронь','user.bootstrap_admin':'Назначен администратор'};
 const statuses = { confirmed: 'Подтверждено', cancelled: 'Отменено' };
 const dateTime = value => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Qyzylorda' }) : '—';
 
@@ -38,6 +38,15 @@ function Editor({ type, item, currentUser, onClose, onSaved }) {
   const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
   useEffect(() => { dialog.current.showModal(); }, []);
   const ownAccount = type === 'users' && String(currentUser.id) === item.id;
+  const [confirmReset, setConfirmReset] = useState(false);
+  async function resetSecondFactor() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      await request(`/api/admin/users/${item.id}/reset-2fa`, { method: 'POST' });
+      onSaved(); onClose();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
   async function submit(event) {
     event.preventDefault(); if (busy) return; setBusy(true); setError('');
     try {
@@ -59,6 +68,11 @@ function Editor({ type, item, currentUser, onClose, onSaved }) {
     {type === 'users' && <>
       <label>Роль<select value={role} disabled={ownAccount} onChange={event => setRole(event.target.value)}><option value="user">Пользователь</option><option value="admin" disabled={!item.microsoft_linked || !item.two_factor_enabled}>Администратор</option></select></label>
       <small>{ownAccount ? 'Собственный административный доступ отключить нельзя.' : 'Администратору нужны подтверждённый Microsoft-аккаунт и настроенная 2FA. Изменение роли или активности завершит сессии пользователя.'}</small>
+      {!ownAccount && item.is_active && item.microsoft_linked && <>
+        <p>Если пользователь потерял доступ к Authenticator, подтвердите его личность и сбросьте второй фактор. Все его сессии завершатся. После входа через Microsoft он подключит приложение заново.</p>
+        {!confirmReset ? <button type="button" disabled={busy} onClick={() => setConfirmReset(true)}>Сбросить второй фактор</button>
+          : <><p>Сбросить второй фактор для {item.email}?</p><button type="button" className="admin-danger" disabled={busy} onClick={resetSecondFactor}>Подтвердить сброс</button><button type="button" disabled={busy} onClick={() => setConfirmReset(false)}>Отмена сброса</button></>}
+      </>}
     </>}
     {type !== 'bookings' && <label className="admin-check"><input type="checkbox" checked={enabled} disabled={ownAccount} onChange={event => setEnabled(event.target.checked)} />{type === 'rooms' ? 'Помещение включено для бронирования' : 'Аккаунт активен'}</label>}
     {type === 'rooms' && <small>Отключение помещения не отменяет уже существующие брони.</small>}

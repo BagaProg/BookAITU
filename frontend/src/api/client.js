@@ -1,5 +1,11 @@
 export const API = (import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:3101')).replace(/\/$/, '');
 let csrfToken;
+let pendingSession;
+export function readSession() {
+  // React StrictMode and multiple consumers must share initial cookie creation.
+  if (!pendingSession) pendingSession = request('/api/auth/session').finally(() => { pendingSession = undefined; });
+  return pendingSession;
+}
 export const setCsrfToken = value => { csrfToken = value; };
 
 export async function request(path, options) {

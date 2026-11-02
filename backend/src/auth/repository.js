@@ -1,6 +1,5 @@
 const pool = require('../db');
-const { encrypt, decrypt, verifyTotp, recoveryCodes, hashRecovery } = require('./crypto');
-const { equal } = require('./config');
+const { encrypt, decrypt, verifyTotp } = require('./crypto');
 
 const publicUser = user => ({ id: String(user.id), email: user.email, name: user.name, role: user.role, two_factor_enabled: user.two_factor_enabled });
 const problem = (code, status = 403) => Object.assign(new Error(code), { code, status });
@@ -21,6 +20,8 @@ function createRepository(config) {
   return {
     async resolveIdentity(profile) {
       return transaction(async client => {
+        // Lock even when this identity has no row yet (concurrent first sign-ins).
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [profile.microsoftId]);
         const existing = (await client.query('SELECT * FROM users WHERE microsoft_id=$1 FOR UPDATE', [profile.microsoftId])).rows[0];
         if (existing && !existing.is_active) throw problem('ACCOUNT_DISABLED');
         // Never claim an existing account or its role based solely on a matching email.
@@ -46,15 +47,9 @@ function createRepository(config) {
         const code = typeof input.code === 'string' ? input.code.replace(/[\s\u200B-\u200D\uFEFF]/g, '') : '';
         let secret = input.enrollmentSecret;
         let match = { valid: false };
-        let remaining = user.backup_codes || [];
         if (/^\d{6}$/.test(code)) {
           secret ||= decrypt(user.two_factor_secret, config.key);
           match = await verifyTotp(secret, code, user.two_factor_last_step);
-        }
-        else if (!input.enrollmentSecret && /^[a-f0-9\s-]{32,80}$/i.test(code)) {
-          const hash = hashRecovery(code);
-          const index = remaining.findIndex(value => equal(value, hash));
-          if (index >= 0) { match = { valid: true }; remaining = remaining.filter((_, i) => i !== index); }
         }
         if (!match.valid) {
           const expiredLock = user.second_factor_locked_until && new Date(user.second_factor_locked_until).getTime() <= Date.now();
@@ -63,17 +58,13 @@ function createRepository(config) {
             [failures, failures >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null, id]);
           return { ok: false, code: failures >= 5 ? 'SECOND_FACTOR_LOCKED' : 'INVALID_SECOND_FACTOR', status: failures >= 5 ? 429 : 401 };
         }
-        let codes;
-        if (input.enrollmentSecret) {
-          const generated = recoveryCodes(); codes = generated.codes; remaining = generated.hashes;
-        }
         const updated = (await client.query(`UPDATE users SET two_factor_enabled=true,
-          two_factor_secret=$1,backup_codes=$2::jsonb,two_factor_last_step=$3,
+          two_factor_secret=$1,backup_codes=NULL,two_factor_last_step=$2,
           second_factor_failures=0,second_factor_locked_until=NULL,last_login_at=now()
-          WHERE id=$4 RETURNING id,email,name,role,two_factor_enabled`,
+          WHERE id=$3 RETURNING id,email,name,role,two_factor_enabled`,
         [input.enrollmentSecret ? encrypt(secret, config.key) : user.two_factor_secret,
-          JSON.stringify(remaining), match.timeStep == null ? user.two_factor_last_step : match.timeStep, id])).rows[0];
-        return { ok: true, user: publicUser(updated), ...(codes ? { recoveryCodes: codes } : {}) };
+          match.timeStep, id])).rows[0];
+        return { ok: true, user: publicUser(updated) };
       });
     },
   };
