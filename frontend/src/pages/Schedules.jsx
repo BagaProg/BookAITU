@@ -5,10 +5,10 @@ const kinds = {class:'Занятие',closure:'Закрытие',coverage:'Пр�
 const local = value => new Date(Date.parse(value)+18000000).toISOString().slice(0,16);
 const display = value => new Date(value).toLocaleString('ru-RU',{timeZone:'Asia/Qyzylorda',dateStyle:'short',timeStyle:'short'});
 export default function Schedules() {
- const [source,setSource]=useState(null),[entries,setEntries]=useState([]),[rooms,setRooms]=useState([]);
+ const [entries,setEntries]=useState([]),[rooms,setRooms]=useState([]);
  const [form,setForm]=useState(empty),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true);
  const [ruleRoom,setRuleRoom]=useState(''),[rules,setRules]=useState(''),[allowed,setAllowed]=useState(true);
- const load=()=>Promise.all([request('/api/admin/schedules'),request('/api/admin/schedules/rooms'),request('/api/admin/schedules/source')]).then(([e,r,s])=>{setEntries(e);setRooms(r);setSource(s)});
+ const load=()=>Promise.all([request('/api/admin/schedules'),request('/api/admin/schedules/rooms')]).then(([e,r])=>{setEntries(e);setRooms(r)});
  useEffect(()=>{let active=true;load().catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
  async function run(work,reset=false){if(busy)return;setBusy(true);setError('');setNotice('');try{await work();await load();if(reset)setForm(empty);setNotice('Изменения сохранены и записаны в журнал.')}catch(e){setError(e.message)}finally{setBusy(false)}}
  const field=(key,value)=>setForm(old=>({...old,[key]:value}));
@@ -37,6 +37,5 @@ export default function Schedules() {
  <section className="admin-section"><div className="schedule-list-heading"><h3>Записи расписания</h3><span>Всего: {entries.length}</span></div>
  {!loading&&!entries.length&&<div className="schedule-empty">Записей с календарными датами пока нет. Добавьте занятие или закрытие с помощью формы выше.</div>}
  <div className="schedule-entry-list">{entries.map(e=><article key={e.id} className="schedule-entry"><div><span className={`schedule-kind ${e.kind}`}>{kinds[e.kind]}</span><h4>{e.code} · {e.title}</h4><p>{display(e.starts_at)} — {display(e.ends_at)}</p></div><div className="schedule-buttons"><button disabled={busy} onClick={()=>{setForm({...e,starts_at:local(e.starts_at),ends_at:local(e.ends_at)});window.scrollTo({top:0,behavior:'smooth'})}}>Изменить</button><button className="schedule-delete" disabled={busy} onClick={()=>{if(window.confirm('Удалить запись '+e.title+'?'))run(()=>request('/api/admin/schedules/'+e.id,{method:'DELETE'}))}}>Удалить</button></div></article>)}</div></section>
- <details className="admin-section schedule-source"><summary>Исходные данные · неделя 8</summary><p className="schedule-hint">Расписание одной группы без календарных дат. Эти сведения не подтверждают свободное время кабинетов.</p><div className="schedule-source-grid">{source?.entries.map((e,i)=><div key={i}><strong>{e.room_code}</strong><span>{e.weekday?['','Пн','Вт','Ср','Чт','Пт','Сб'][e.weekday]:'День не указан'} · {e.start}–{e.end}</span></div>)}</div></details>
  </div>;
 }

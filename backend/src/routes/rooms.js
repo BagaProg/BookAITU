@@ -9,7 +9,7 @@ router.get('/availability', async (req,res) => {
  const from=`${date}T${start}+05:00`, to=`${date}T${end}+05:00`;
  const {rows:rooms}=await pool.query('SELECT * FROM rooms ORDER BY block,floor,number');
  const {rows:events}=await pool.query('SELECT * FROM room_events WHERE ends_at>$1::timestamptz ORDER BY starts_at',[from]);
- const {rows:bookings}=await pool.query("SELECT DISTINCT room_id FROM bookings WHERE booking_date=$1 AND status<>'cancelled' AND start_time<$3::time AND end_time>$2::time",[date,start,end]);
+ const {rows:bookings}=await pool.query("SELECT DISTINCT room_id FROM bookings WHERE booking_date=$1 AND status='confirmed' AND start_time<$3::time AND end_time>$2::time",[date,start,end]);
  res.set('Cache-Control','no-store');
  res.json({checkedAt:new Date().toISOString(),rooms:rooms.map(room=>{
   const own=events.filter(e=>String(e.room_id)===String(room.id));

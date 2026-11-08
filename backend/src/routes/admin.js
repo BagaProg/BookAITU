@@ -30,12 +30,12 @@ router.get('/dashboard', async (req, res) => {
       (SELECT count(*)::int FROM users WHERE role='admin' AND is_active) AS admins_active,
       (SELECT count(*)::int FROM rooms) AS rooms_total,(SELECT count(*)::int FROM rooms WHERE is_active) AS rooms_active,
       (SELECT count(*)::int FROM bookings) AS bookings_total,
-      (SELECT count(*)::int FROM bookings WHERE status<>'cancelled') AS bookings_active,
+      (SELECT count(*)::int FROM bookings WHERE status='confirmed') AS bookings_active,
       (SELECT count(*)::int FROM bookings WHERE status='cancelled') AS bookings_cancelled,
-      (SELECT count(*)::int FROM bookings WHERE booking_date=timezone('Asia/Qyzylorda',now())::date AND status<>'cancelled') AS bookings_today`)).rows[0];
+      (SELECT count(*)::int FROM bookings WHERE booking_date=timezone('Asia/Qyzylorda',now())::date AND status='confirmed') AS bookings_today`)).rows[0];
     const upcoming = (await client.query(`SELECT to_char(d,'YYYY-MM-DD') AS date,count(b.id)::int AS count
       FROM generate_series(timezone('Asia/Qyzylorda',now())::date,timezone('Asia/Qyzylorda',now())::date+6,interval '1 day') d
-      LEFT JOIN bookings b ON b.booking_date=d::date AND b.status<>'cancelled' GROUP BY d ORDER BY d`)).rows;
+      LEFT JOIN bookings b ON b.booking_date=d::date AND b.status='confirmed' GROUP BY d ORDER BY d`)).rows;
     const byStatus = (await client.query('SELECT status,count(*)::int AS count FROM bookings GROUP BY status ORDER BY status')).rows;
     await client.query('COMMIT'); res.json({ metrics, upcoming, byStatus, timezone: 'Asia/Qyzylorda' });
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; } finally { client.release(); }
@@ -55,7 +55,7 @@ router.get('/rooms', async (req, res) => {
 router.get('/bookings', async (req, res) => {
   const options = pageOptions(req.query), status = req.query.status || null, room = req.query.room_id || null;
   const from = req.query.from || null, to = req.query.to || null;
-  if (status && !['confirmed', 'cancelled'].includes(status)) invalid('Invalid status');
+  if (status && !['pending', 'confirmed', 'cancelled', 'rejected', 'expired'].includes(status)) invalid('Invalid status');
   if (room && !validId(room)) invalid('Invalid room_id');
   if ((from && !validDate(from)) || (to && !validDate(to)) || (from && to && from > to)) invalid('Invalid date interval');
   await paged(res, options, `SELECT b.id::text AS id,b.user_id::text AS user_id,b.room_id::text AS room_id,u.email,r.code AS room_code,
@@ -92,5 +92,17 @@ router.post('/bookings/:id/cancel', async (req, res) => {
   body(req.body, ['reason']); const reason = req.body.reason;
   if (typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 500) invalid('Cancellation reason must be 3–500 characters');
   res.json(await service.cancelBooking(req.user.id, req.params.id, reason.trim()));
+});
+router.delete('/bookings/:id', async (req, res) => {
+  await service.deleteBooking(req.user.id, req.params.id);
+  res.status(204).end();
+});
+router.post('/bookings/:id/approve', async (req, res) => {
+  res.json(await service.decideBooking(req.user.id, req.params.id, true));
+});
+router.post('/bookings/:id/reject', async (req, res) => {
+  body(req.body, ['reason']);
+  if (typeof req.body.reason !== 'string' || req.body.reason.trim().length < 3 || req.body.reason.length > 500) invalid('Reason must be 3–500 characters');
+  res.json(await service.decideBooking(req.user.id, req.params.id, false, req.body.reason.trim()));
 });
 module.exports = router;

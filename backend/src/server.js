@@ -55,7 +55,10 @@ if (require.main === module) {
   const port = process.env.PORT || 3001;
   app.listen(port, process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'), error => {
     if (error) { console.error('Server failed to listen:', error.code || error.name); process.exitCode = 1; }
-    else console.log(`Server on ${port}`);
+    else {
+      console.log(`Server on ${port}`);
+      require('./bookingCleanup').startBookingCleanup(require('./db'));
+    }
   });
 }
 

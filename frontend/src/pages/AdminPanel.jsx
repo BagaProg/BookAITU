@@ -6,8 +6,8 @@ import './AdminPanel.css';
 import { readSearchInterval, saveSearchInterval } from '../api/searchInterval';
 
 const labels = { schedules: 'Расписания', overview: 'Обзор', bookings: 'Бронирования', rooms: 'Помещения', users: 'Пользователи', audit: 'Журнал действий' };
-const actions = {'schedule.create':'Добавлено расписание','schedule.update':'Изменено расписание','schedule.delete':'Удалена запись расписания','room.access.update':'Изменены правила доступа','room.update':'Изменено помещение','user.update':'Изменён пользователь','user.reset_2fa':'Сброшен второй фактор','booking.cancel':'Отменена бронь','user.bootstrap_admin':'Назначен администратор'};
-const statuses = { confirmed: 'Подтверждено', cancelled: 'Отменено' };
+const actions = {'schedule.create':'Добавлено расписание','schedule.update':'Изменено расписание','schedule.delete':'Удалена запись расписания','room.access.update':'Изменены правила доступа','room.update':'Изменено помещение','user.update':'Изменён пользователь','user.reset_2fa':'Сброшен второй фактор','booking.approve':'Заявка одобрена','booking.reject':'Заявка отклонена','booking.cancel':'Отменена бронь','booking.delete':'Удалена бронь','user.bootstrap_admin':'Назначен администратор'};
+const statuses = { pending: 'Ожидает решения', confirmed: 'Подтверждено', cancelled: 'Отменено', rejected: 'Отклонено', expired: 'Срок истёк' };
 const dateTime = value => value ? new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Qyzylorda' }) : '—';
 
 function Overview() {
@@ -27,11 +27,12 @@ function Overview() {
       <div className="admin-bars">{data.upcoming.map(day => <div className="admin-bar-row" key={day.date}><time dateTime={day.date}>{day.date.slice(5)}</time><div className="admin-bar-track"><div style={{ width: `${day.count / max * 100}%` }} /></div><strong>{day.count}</strong></div>)}</div>
       <p className="admin-muted">Источник: текущие записи PostgreSQL. Нулевое значение означает отсутствие бронирований на этот день.</p>
     </section>
-    <section className="admin-section"><h2>Статусы за всё время</h2><div className="admin-statuses">{Object.entries(statuses).map(([key, title]) => <span key={key}>{title}: <strong>{data.byStatus.find(row => row.status === key)?.count || 0}</strong></span>)}</div></section>
+    <section className="admin-section"><h2>Статусы сохранённых бронирований</h2><div className="admin-statuses">{Object.entries(statuses).map(([key, title]) => <span key={key}>{title}: <strong>{data.byStatus.find(row => row.status === key)?.count || 0}</strong></span>)}</div></section>
   </>;
 }
 
 function Editor({ type, item, currentUser, onClose, onSaved }) {
+  const deleting = type === 'bookings' && item.status === 'cancelled';
   const dialog = useRef(null);
   const [name, setName] = useState(item.name || ''), [capacity, setCapacity] = useState(item.capacity ?? '');
   const [enabled, setEnabled] = useState(item.is_active), [role, setRole] = useState(item.role || 'user');
@@ -47,18 +48,24 @@ function Editor({ type, item, currentUser, onClose, onSaved }) {
       onSaved(); onClose();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
+  async function approveRequest() {
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await request(`/api/admin/bookings/${item.id}/approve`, { method: 'POST' }); onSaved(); onClose(); }
+    catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
   async function submit(event) {
     event.preventDefault(); if (busy) return; setBusy(true); setError('');
     try {
       const payload = type === 'rooms' ? { name: name.trim() || null, capacity: capacity === '' ? null : Number(capacity), is_active: enabled }
         : type === 'users' ? { role, is_active: enabled } : { reason };
-      await request(`/api/admin/${type}/${item.id}${type === 'bookings' ? '/cancel' : ''}`, { method: type === 'bookings' ? 'POST' : 'PATCH', body: JSON.stringify(payload) });
+      await request(`/api/admin/${type}/${item.id}${type === 'bookings' && !deleting ? (item.status === 'pending' ? '/reject' : '/cancel') : ''}`, deleting ? { method: 'DELETE' } : { method: type === 'bookings' ? 'POST' : 'PATCH', body: JSON.stringify(payload) });
       if (type === 'bookings') playBookingSound();
       onSaved(); onClose();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   return <dialog ref={dialog} className="admin-dialog" onCancel={event => { if (busy) event.preventDefault(); else onClose(); }} aria-labelledby="editor-heading"><form onSubmit={submit}>
-    <h2 id="editor-heading">{type === 'rooms' ? item.code : type === 'users' ? item.email : `Отмена брони №${item.id}`}</h2>
+    <h2 id="editor-heading">{type === 'rooms' ? item.code : type === 'users' ? item.email : `${deleting ? 'Удаление' : item.status === 'pending' ? 'Рассмотрение' : 'Отмена'} брони №${item.id}`}</h2>
     {error && <p role="alert" className="admin-error">{error}</p>}
     {type === 'rooms' && <>
       <label>Название<input value={name} maxLength={100} onChange={event => setName(event.target.value)} /></label>
@@ -76,8 +83,8 @@ function Editor({ type, item, currentUser, onClose, onSaved }) {
     </>}
     {type !== 'bookings' && <label className="admin-check"><input type="checkbox" checked={enabled} disabled={ownAccount} onChange={event => setEnabled(event.target.checked)} />{type === 'rooms' ? 'Помещение включено для бронирования' : 'Аккаунт активен'}</label>}
     {type === 'rooms' && <small>Отключение помещения не отменяет уже существующие брони.</small>}
-    {type === 'bookings' && <><p>{item.room_code} · {item.email}<br />{item.booking_date} · {item.start_time.slice(0, 5)}–{item.end_time.slice(0, 5)}</p><label>Причина отмены<textarea required minLength={3} maxLength={500} rows={3} value={reason} onChange={event => setReason(event.target.value)} /></label><small>Запись останется в истории. Действие попадёт в журнал администратора.</small></>}
-    <div className="admin-actions"><button type="button" onClick={onClose} disabled={busy}>Закрыть</button><button className={type === 'bookings' ? 'admin-danger' : 'admin-primary'} disabled={busy || ownAccount}>{busy ? 'Сохраняем…' : type === 'bookings' ? 'Отменить бронирование' : 'Сохранить'}</button></div>
+    {type === 'bookings' && <><p>{item.room_code} · {item.email}<br />{item.booking_date} · {item.start_time.slice(0, 5)}–{item.end_time.slice(0, 5)}</p>{deleting ? <p>Удалить отменённую бронь из базы без возможности восстановления? Запись об административном действии сохранится в журнале.</p> : <><label>{item.status === 'pending' ? 'Причина отказа' : 'Причина отмены'}<textarea required minLength={3} maxLength={500} rows={3} value={reason} onChange={event => setReason(event.target.value)} /></label><small>Отмена сохранит запись до автоматической очистки или удаления администратором. Действие попадёт в журнал.</small></>}</>}
+    <div className="admin-actions">{type === 'bookings' && item.status === 'pending' && <button type="button" className="admin-primary" disabled={busy} onClick={approveRequest}>Одобрить заявку</button>}<button type="button" onClick={onClose} disabled={busy}>Закрыть</button><button className={type === 'bookings' ? 'admin-danger' : 'admin-primary'} disabled={busy || ownAccount}>{busy ? 'Сохраняем…' : type === 'bookings' ? (deleting ? 'Удалить навсегда' : item.status === 'pending' ? 'Отклонить заявку' : 'Отменить бронирование') : 'Сохранить'}</button></div>
   </form></dialog>;
 }
 
@@ -130,7 +137,7 @@ function Records({ type, user }) {
     </tr></thead><tbody>{rows.map(row => <tr key={row.id}>
       {type === 'rooms' && <><td><strong>{row.code}</strong>{row.name && <small>{row.name}</small>}</td><td>{row.floor} / {row.room_type}</td><td>{row.capacity ?? 'Не указана'}</td><td>{row.is_active ? 'Включено' : 'Отключено'}</td><td><span className={`admin-availability ${!loading && !error ? availability?.[String(row.id)] || '' : ''}`}>{loading ? 'Проверяем…' : error ? 'Не удалось проверить' : ({ available: 'Свободно', occupied: 'Занято', unavailable: 'Отключено' }[availability?.[String(row.id)]] || 'Неизвестно')}</span></td><td><button onClick={() => setEditing(row)}>Изменить</button></td></>}
       {type === 'users' && <><td><strong>{row.name}</strong><small>{row.email}</small></td><td>{row.role === 'admin' ? 'Администратор' : 'Пользователь'}</td><td>{row.is_active ? 'Активен' : 'Отключён'}</td><td>{row.microsoft_linked ? 'Microsoft ✓' : 'Не привязан'} / {row.two_factor_enabled ? '2FA ✓' : 'Без 2FA'}</td><td>{dateTime(row.last_login_at)}</td><td><button disabled={String(user.id) === row.id} onClick={() => setEditing(row)}>Изменить</button></td></>}
-      {type === 'bookings' && <><td>#{row.id}<small>{row.email}</small></td><td>{row.room_code}</td><td>{row.booking_date}<small>{row.start_time.slice(0, 5)}–{row.end_time.slice(0, 5)}</small></td><td>{row.purpose}</td><td>{statuses[row.status]}{row.cancellation_reason && <small>{row.cancellation_reason}</small>}</td><td><button disabled={row.status === 'cancelled'} onClick={() => { setEditing(row); }}>Отменить</button></td></>}
+      {type === 'bookings' && <><td>#{row.id}<small>{row.email}</small></td><td>{row.room_code}</td><td>{row.booking_date}<small>{row.start_time.slice(0, 5)}–{row.end_time.slice(0, 5)}</small></td><td>{row.purpose}</td><td>{statuses[row.status]}{row.cancellation_reason && <small>{row.cancellation_reason}</small>}</td><td><button disabled={['rejected','expired'].includes(row.status)} className={row.status === 'cancelled' ? 'admin-danger' : undefined} onClick={() => { setEditing(row); }}>{row.status === 'cancelled' ? 'Удалить' : row.status === 'pending' ? 'Рассмотреть' : 'Отменить'}</button></td></>}
       {type === 'audit' && <><td>{dateTime(row.created_at)}</td><td>{row.actor_email}</td><td>{actions[row.action] || row.action}<small>{row.action}</small></td><td>{row.resource_type} #{row.resource_id}</td><td><details><summary>До / после</summary><pre>{JSON.stringify({ before: row.before_data, after: row.after_data }, null, 2)}</pre></details></td></>}
     </tr>)}</tbody></table></div>
     {!loading && !error && rows.length === 0 && <p className="admin-muted">Нет записей по выбранным фильтрам.</p>}

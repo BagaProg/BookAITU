@@ -6,6 +6,7 @@ import Layout from '../components/Layout'
 import { Button, Container } from '../components/ui'
 import { Segmented } from '../components/Fields'
 import './Finder.css'
+import CampusMap from '../components/CampusMap'
 import { Select, DatePicker, TimePicker } from '../components/SearchPickers'
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Qyzylorda', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -41,8 +42,10 @@ export default function Finder() {
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible') setRevision(v => v + 1) }
     window.addEventListener('focus', refresh)
-    const timer = window.setInterval(refresh, 60000)
-    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer) }
+    window.addEventListener('bookings-changed', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    const timer = window.setInterval(refresh, 15000)
+    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('bookings-changed', refresh); document.removeEventListener('visibilitychange', refresh); window.clearInterval(timer) }
   }, [])
   const rooms = data?.rooms || []
   const blocks = ['All', ...new Set(rooms.map(r => r.block).filter(Boolean))]
@@ -72,6 +75,7 @@ export default function Finder() {
       {error && <div role="alert" className="auth-error">{error}<Button variant="secondary" onClick={() => { setLoading(true); setError(''); setRevision(v => v + 1) }}>Retry</Button></div>}
       {loading && <p role="status">Checking availability…</p>}
       {!loading && !error && data && <><div className="finder-summary">{summary.map(([label, value, description]) => <article key={label}><p>{label}</p><strong>{value}</strong><span>{description}</span></article>)}</div>
+        <CampusMap rooms={rooms} floorFilter={filters.floor} onFloorChange={set('floor')} slot={selection} checkedAt={data.checkedAt} />
         <div className="finder-section-title"><h2>Matching rooms</h2><p>Showing {Math.min(limit, visible.length)} of {visible.length} rooms</p></div>
         <div className="finder-filters"><Select label="Availability" options={['All', ...Object.values(statusNames)]} value={filters.availability} onChange={filter('availability')} /><Select label="Sort rooms" options={['Room order','Capacity: low to high']} value={sortCapacity ? 'Capacity: low to high' : 'Room order'} onChange={value=>setSortCapacity(value !== 'Room order')} /><Button variant="secondary" onClick={()=>{setFilters({availability:'All',block:'All',floor:'All',type:'All'});setDraft(old=>({...old,block:'All',floor:'All',type:'All'}));setSortCapacity(false);setLimit(12)}}>Reset filters</Button></div>
         {visible.length ? <div className="finder-cards">{visible.slice(0, limit).map((room, index) => <RoomCard key={room.id} room={room} slot={selection} checkedAt={data.checkedAt} index={index} />)}</div> : <div className="finder-empty"><Search size={30} /><h3>No matching rooms</h3><p>Change your filters or select another time.</p></div>}

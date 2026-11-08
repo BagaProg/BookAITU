@@ -7,6 +7,7 @@ import PageShell from './components/PageShell'
 import { Button, Panel, Notice, TwoColumn, Detail } from './components/ui'
 import AdminPanel from './pages/AdminPanel'
 import Finder from './pages/Finder'
+import { DatePicker, TimePicker } from './components/SearchPickers'
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Qyzylorda', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const slotQuery = slot => new URLSearchParams(slot).toString()
@@ -32,21 +33,40 @@ function RoomSummary({ room, slot }) {
   return <><h2 className="text-2xl font-semibold text-ink">{room.name || room.code}</h2><div className="grid grid-cols-2 gap-4"><Detail label="Block">{room.block || '—'}</Detail><Detail label="Floor">{room.floor ?? '—'}</Detail><Detail label="Room type">{room.room_type}</Detail><Detail label="Access rules">{room.access_rules || 'Not provided'}</Detail><Detail label="Capacity">{room.capacity ?? 'Not provided'}</Detail></div>{slot && <Detail label="Selected time">{slot.date} · {slot.start}–{slot.end} (Astana)</Detail>}</>
 }
 function RoomPage({ review = false }) {
-  const { id } = useParams(), [query] = useSearchParams(), navigate = useNavigate()
+  const { id } = useParams(), [query, setQuery] = useSearchParams(), navigate = useNavigate()
   const records = useRecords('/api/rooms'), room = records.data?.find(item => String(item.id) === id)
   const slot = Object.fromEntries(['date', 'start', 'end'].map(key => [key, query.get(key) || '']))
   const [purpose, setPurpose] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [club, setClub] = useState(''), [participants, setParticipants] = useState('1')
+  const [availability, setAvailability] = useState(null)
+  const key = `${id}:${slotQuery(slot)}`
+  useEffect(() => {
+    let active = true
+    if (!validSlot(slot)) return
+    const check = () => request(`/api/rooms/availability?${slotQuery(slot)}`).then(data => {
+      if (active) setAvailability({ key, room: data.rooms.find(item => String(item.id) === id) })
+    }).catch(err => { if (active) setAvailability({ key, error: err.message }) })
+    check()
+    const timer = setInterval(check, 15000)
+    return () => { active = false; clearInterval(timer) }
+  }, [key])
+  const checked = availability?.key === key ? availability : null
+  const canBook = validSlot(slot) && checked?.room?.availability === 'available' && !checked?.error
+  function changeSlot(name, value) {
+    setError(''); setAvailability(null)
+    setQuery({ ...slot, [name]: value }, { replace: true })
+  }
   async function submit(event) {
     event.preventDefault()
-    if (busy || !validSlot(slot)) return
+    if (busy || !canBook) return
     setBusy(true); setError('')
     try {
-      const booking = await request('/api/bookings', { method: 'POST', body: JSON.stringify({ room_id: id, booking_date: slot.date, start_time: slot.start, end_time: slot.end, purpose: purpose.trim() }) })
+      const booking = await request('/api/bookings', { method: 'POST', body: JSON.stringify({ room_id: id, booking_date: slot.date, start_time: slot.start, end_time: slot.end, purpose: `${club.trim() ? 'Club: ' + club.trim() + '. ' : ''}Participants: ${participants}. ${purpose.trim()}` }) })
       playBookingSound()
       navigate(`/bookings?created=${encodeURIComponent(booking.id)}`, { replace: true })
-    } catch (err) { setError(err.message) } finally { setBusy(false) }
+    } catch (err) { setError(err.message); if (err.status === 409) setAvailability({ key, error: err.message }) } finally { setBusy(false) }
   }
-  return <PageShell title={review ? 'Review and confirm booking' : 'Room details'} description="Review the room and selected time before booking."><LoadState {...records} />{records.data && !records.error && (!room ? <Panel>Room not found or no longer active.<Button to="/find">Find another room</Button></Panel> : <TwoColumn left={<Panel title="About this room"><RoomSummary room={room} slot={slot} /></Panel>} right={<Panel title={review ? 'Confirm your reservation' : 'Selected time'}>{!validSlot(slot) ? <><p role="alert">Select a valid date and time to continue.</p><Button to="/find">Change selection</Button></> : <><Notice title="Availability checked on confirmation">The server checks for overlapping reservations before saving your booking. Staff access restrictions and known classes are checked. Timetables are incomplete: your booking reserves time in BookAITU but other groups may have unlisted classes.</Notice>{review ? <form className="flex flex-col gap-4" onSubmit={submit}><Field label="Purpose"><textarea className={inputClass} required maxLength={500} value={purpose} onChange={event => setPurpose(event.target.value)} /></Field>{error && <p role="alert" className="text-red-700">{error}</p>}<Button type="submit" disabled={busy || !purpose.trim()}>{busy ? 'Saving…' : 'Confirm booking'}</Button></form> : <Button to={`/rooms/${id}/review?${slotQuery(slot)}`}>Book room</Button>}<Button to="/find" variant="secondary">Change room or time</Button></>}</Panel>} />)}</PageShell>
+  return <PageShell title={review ? 'Review and confirm booking' : 'Room details'} description="Review the room and selected time before booking."><LoadState {...records} />{records.data && !records.error && (!room ? <Panel>Room not found or no longer active.<Button to="/find">Find another room</Button></Panel> : <TwoColumn left={<Panel title="About this room"><RoomSummary room={room} slot={slot} /></Panel>} right={<Panel title={review ? 'Confirm your reservation' : 'Selected time'}><fieldset disabled={busy} className="grid gap-4"><DatePicker value={slot.date || today()} onChange={value => changeSlot('date', value)} /><TimePicker label="Start time" value={slot.start || '09:00'} onChange={value => changeSlot('start', value)} /><TimePicker label="End time" value={slot.end || '10:00'} onChange={value => changeSlot('end', value)} /></fieldset>{validSlot(slot) && <p role="status">{!checked ? 'Checking availability…' : checked.error || checked.room?.reason || 'Availability unknown'}</p>}{!validSlot(slot) ? <><p role="alert">Select a valid date and time to continue.</p></> : <><Notice title="Administrator approval required for student requests">Student requests do not reserve the room until approved. Maximum two pending requests, up to two hours each. Administrators book directly. Availability is checked again on approval. Staff access restrictions and known classes are checked. Timetables are incomplete: your booking reserves time in BookAITU but other groups may have unlisted classes.</Notice>{review ? <form className="flex flex-col gap-4" onSubmit={submit}><Field label="Club / organisation (optional)"><input className={inputClass} maxLength={100} value={club} onChange={e => setClub(e.target.value)} /></Field><Field label="Number of participants"><input className={inputClass} type="number" required min="1" max="1000" value={participants} onChange={e => setParticipants(e.target.value)} /></Field><Field label="Purpose"><textarea className={inputClass} required maxLength={500} value={purpose} onChange={event => setPurpose(event.target.value)} /></Field>{error && <p role="alert" className="text-red-700">{error}</p>}<Button type="submit" disabled={busy || !purpose.trim() || !canBook}>{busy ? 'Saving…' : 'Submit request'}</Button></form> : <Button disabled={!canBook} onClick={() => { if (canBook) navigate(`/rooms/${id}/review?${slotQuery(slot)}`) }}>Request room</Button>}<Button to="/find" variant="secondary">Choose another room</Button></>}</Panel>} />)}</PageShell>
 }
 function Bookings({ user }) {
   const records = useRecords('/api/bookings'), [query] = useSearchParams()
@@ -57,7 +77,7 @@ function Bookings({ user }) {
     try { await request(`/api/bookings/${cancelling}`, { method: 'DELETE' }); playBookingSound(); setCancelling(null); records.reload() } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const rows = records.data?.filter(row => row.email === user.email) || []
-  return <PageShell active="bookings" title="My bookings" description="Your latest reservations and cancellations.">{query.get('created') && <Notice title={`Booking #${query.get('created')} created`}>Your reservation has been saved.</Notice>}<Button onClick={records.reload} variant="secondary">Refresh</Button><LoadState {...records} />{error && <p role="alert">{error}</p>}{records.data && !records.error && <>{!rows.length && <Panel>No bookings found.</Panel>}{rows.map(booking => <Panel key={booking.id} title={`${booking.room} · #${booking.id}`}><p>{booking.booking_date} · {booking.start_time.slice(0,5)}–{booking.end_time.slice(0,5)}</p><p>{booking.purpose}</p><p>Status: {booking.status}</p>{booking.status !== 'cancelled' && (cancelling === booking.id ? <div className="flex flex-wrap gap-3"><span>Cancel this reservation?</span><Button variant="danger" disabled={busy} onClick={cancel}>{busy ? 'Cancelling…' : 'Confirm cancellation'}</Button><Button variant="secondary" disabled={busy} onClick={() => setCancelling(null)}>Keep booking</Button></div> : <Button variant="danger" disabled={busy} onClick={() => { setCancelling(booking.id) }}>Cancel booking</Button>)}</Panel>)}<p className="text-sm text-muted">The API returns the latest 50 reservations{user.role === 'admin' ? ' across all users; use the admin panel to search older bookings' : ''}.</p></>}</PageShell>
+  return <PageShell active="bookings" title="My bookings" description="Your latest reservations and cancellations.">{query.get('created') && <Notice title={`Booking #${query.get('created')} created`}>Your request has been saved. Student requests need administrator approval; only confirmed reservations hold a room.</Notice>}<Button onClick={records.reload} variant="secondary">Refresh</Button><LoadState {...records} />{error && <p role="alert">{error}</p>}{records.data && !records.error && <>{!rows.length && <Panel>No bookings found.</Panel>}{rows.map(booking => <Panel key={booking.id} title={`${booking.room} · #${booking.id}`}><p>{booking.booking_date} · {booking.start_time.slice(0,5)}–{booking.end_time.slice(0,5)}</p><p>{booking.purpose}</p><p>Status: {({pending: 'Awaiting approval', confirmed: 'Confirmed', rejected: 'Rejected', expired: 'Expired', cancelled: 'Cancelled'}[booking.status] || booking.status)}</p>{booking.cancellation_reason && <p>{booking.cancellation_reason}</p>}{['pending', 'confirmed'].includes(booking.status) && (cancelling === booking.id ? <div className="flex flex-wrap gap-3"><span>Cancel this reservation?</span><Button variant="danger" disabled={busy} onClick={cancel}>{busy ? 'Cancelling…' : 'Confirm cancellation'}</Button><Button variant="secondary" disabled={busy} onClick={() => setCancelling(null)}>Keep booking</Button></div> : <Button variant="danger" disabled={busy} onClick={() => { setCancelling(booking.id) }}>Cancel booking</Button>)}</Panel>)}<p className="text-sm text-muted">The API returns the latest 50 reservations{user.role === 'admin' ? ' across all users; use the admin panel to search older bookings' : ''}.</p></>}</PageShell>
 }
 export default function BookingApp({ user }) {
   return <Routes><Route path="/find" element={<Finder />} /><Route path="/rooms/:id" element={<RoomPage />} /><Route path="/rooms/:id/review" element={<RoomPage review />} /><Route path="/bookings" element={<Bookings user={user} />} /><Route path="/admin" element={user.role === 'admin' ? <><Layout active="admin"><AdminPanel user={user} /></Layout></> : <Navigate to="/find" replace />} /><Route path="*" element={<Navigate to="/find" replace />} /></Routes>

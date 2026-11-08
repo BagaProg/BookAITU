@@ -50,7 +50,7 @@ test('API uses credentials, rotates CSRF, preserves errors and handles logout', 
     await assert.rejects(request('/api/bookings', { method: 'POST' }), error => error.status === 409 && error.message.includes('already booked'));
     assert.equal(await request('/api/bookings/41', { method: 'DELETE' }), undefined);
     await assert.rejects(request('/api/rooms'), error => error.status === 401);
-    assert.deepEqual(events, ['session-expired']);
+    assert.deepEqual(events, ['bookings-changed', 'bookings-changed', 'session-expired']);
   } finally { globalThis.fetch = originalFetch; globalThis.window = originalWindow; }
 });
 

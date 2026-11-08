@@ -7,7 +7,7 @@ const { authHarness, browser } = require('./helpers/authHarness');
 const harness = authHarness();
 const app = createApp({ auth: harness.options });
 
-const valid = { user_id: '1', room_id: '1', booking_date: '2026-10-23', start_time: '10:00', end_time: '11:00', purpose: 'Study' };
+const valid = { user_id: '1', room_id: '1', booking_date: '2099-10-23', start_time: '10:00', end_time: '11:00', purpose: 'Study' };
 let server, base, signedIn;
 const originalQuery = pool.query;
 const originalConnect = pool.connect;
@@ -46,12 +46,13 @@ function mockTransaction({ missing = false, conflict = false, failure = false } 
     query: async (sql, params) => {
       calls.push({ sql, params });
       if (sql.includes('FROM rooms')) return { rowCount: missing ? 0 : 1, rows: missing ? [] : [{id:'1',is_active:true,student_access:true}] };
-      if (sql.includes('FROM room_events')) return {rows:[{kind:'coverage',starts_at:'2026-10-23T00:00:00+05:00',ends_at:'2026-10-24T00:00:00+05:00'}]};
+      if (sql.includes('FROM room_events')) return {rows:[{kind:'coverage',starts_at:'2099-10-23T00:00:00+05:00',ends_at:'2099-10-24T00:00:00+05:00'}]};
       if (sql.includes('FROM users')) return { rowCount: 1 };
+      if (sql.includes('count(*)')) return { rows: [{ count: 0 }] };
       if (sql.includes('FROM bookings')) return { rowCount: conflict ? 1 : 0 };
       if (sql.includes('INSERT')) {
         assert.match(sql, /purpose, status/);
-        assert.match(sql, /'confirmed'/);
+        assert.match(sql, /\$7/); assert.equal(params[6], 'pending');
         if (failure) throw Object.assign(new Error('private database details'), { code: 'XX000' });
         return { rows: [{ id: 123 }] };
       }
@@ -91,7 +92,7 @@ test('create locks room before checking overlap and commits parameterized insert
   const calls = mockTransaction();
   assert.equal((await post({ ...valid, purpose: "  O'Brien  " })).status, 201);
   assert.ok(calls[1].sql.includes('FOR UPDATE'));
-  assert.deepEqual(calls.find(c => c.sql.includes('INSERT')).params, ['1', '1', '2026-10-23', '10:00', '11:00', "O'Brien"]);
+  assert.deepEqual(calls.find(c => c.sql.includes('INSERT')).params, ['1', '1', '2099-10-23', '10:00', '11:00', "O'Brien", 'pending']);
   assert.equal(calls.at(-2).sql, 'COMMIT');
   assert.equal(calls.at(-1).sql, 'RELEASE');
 });

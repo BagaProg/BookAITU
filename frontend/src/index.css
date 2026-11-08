@@ -19,3 +19,5 @@
     @apply bg-canvas font-sans text-copy antialiased;
   }
 }
+
+:root { --surface: #fff; color-scheme: light; }

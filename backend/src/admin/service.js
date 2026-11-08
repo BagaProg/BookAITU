@@ -70,8 +70,38 @@ async function cancelBooking(actorId, id, reason) {
     const before = (await client.query(`SELECT ${bookingFields} FROM bookings WHERE id=$1 FOR UPDATE`, [id])).rows[0];
     if (!before) throw fail(404, 'Booking not found');
     if (before.status === 'cancelled') return before;
+    if (!['pending', 'confirmed'].includes(before.status)) throw fail(409, 'This request is already closed');
     const after = (await client.query(`UPDATE bookings SET status='cancelled',cancelled_at=now(),cancelled_by=$1,cancellation_reason=$2 WHERE id=$3 RETURNING ${bookingFields}`, [actorId, reason, id])).rows[0];
     await audit(client, actor, 'booking.cancel', 'booking', id, before, after); return after;
   });
 }
-module.exports = { adminTransaction, updateUser, resetSecondFactor, updateRoom, cancelBooking, audit, userFields, roomFields, fail };
+async function deleteBooking(actorId, id) {
+  return adminTransaction(actorId, async (client, actor) => {
+    const before = (await client.query(`SELECT ${bookingFields} FROM bookings WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+    if (!before) throw fail(404, 'Booking not found');
+    if (before.status !== 'cancelled') throw fail(409, 'Cancel the booking before deleting it');
+    await client.query("DELETE FROM bookings WHERE id=$1 AND status='cancelled'", [id]);
+    await audit(client, actor, 'booking.delete', 'booking', id, before, null);
+  });
+}
+module.exports = { adminTransaction, updateUser, resetSecondFactor, updateRoom, cancelBooking, deleteBooking, audit, userFields, roomFields, fail };
+
+async function decideBooking(actorId, id, approve, reason = '') {
+  return adminTransaction(actorId, async (client, actor) => {
+    const before = (await client.query(`SELECT ${bookingFields},to_char(booking_date,'YYYY-MM-DD') AS date_text,
+      (booking_date + start_time > timezone('Asia/Qyzylorda',now())) AS future FROM bookings WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+    if (!before) throw fail(404, 'Booking not found');
+    if (before.status !== 'pending') throw fail(409, 'Only pending requests can be reviewed');
+    if (!before.future) throw fail(409, 'The requested start time has passed');
+    if (approve) {
+      const room = (await client.query('SELECT * FROM rooms WHERE id=$1 FOR UPDATE', [before.room_id])).rows[0];
+      if (!room) throw fail(404, 'Room not found');
+      const state = await require('../availability').inspect(client, room, before.date_text, before.start_time, before.end_time);
+      if (state.availability !== 'available') throw fail(409, state.reason);
+    }
+    const after = (await client.query(`UPDATE bookings SET status=$2,cancellation_reason=$3 WHERE id=$1 RETURNING ${bookingFields}`, [id, approve ? 'confirmed' : 'rejected', approve ? null : reason])).rows[0];
+    await audit(client, actor, approve ? 'booking.approve' : 'booking.reject', 'booking', id, before, after);
+    return after;
+  });
+}
+module.exports.decideBooking = decideBooking;

@@ -103,6 +103,40 @@ test('administrator cancellation retains booking and reason, repeat is a no-op',
   assert.ok(!repeated.some(call => call.sql.startsWith('UPDATE bookings')));
 });
 
+test('permanent booking deletion requires admin, CSRF, write flag and valid id', async () => {
+  const path = '/api/admin/bookings/2';
+  assert.equal((await fetch(`${base}${path}`, { method: 'DELETE' })).status, 401);
+  assert.equal((await ordinary.request(path, { method: 'DELETE' })).status, 403);
+  assert.equal((await admin.request(path, { method: 'DELETE', headers: { 'X-CSRF-Token': 'wrong' } })).status, 403);
+  process.env.PG_ALLOW_WRITE = 'false';
+  try { assert.equal((await admin.request(path, { method: 'DELETE' })).status, 403); }
+  finally { process.env.PG_ALLOW_WRITE = 'true'; }
+  assert.equal((await admin.request('/api/admin/bookings/invalid', { method: 'DELETE' })).status, 400);
+});
+test('permanent deletion rejects active and missing bookings', async () => {
+  for (const target of [null, { id: '2', status: 'confirmed' }]) {
+    const calls = fakeDatabase(target);
+    assert.equal((await admin.request('/api/admin/bookings/2', { method: 'DELETE' })).status, target ? 409 : 404);
+    assert.ok(!calls.some(call => call.sql.startsWith('DELETE FROM bookings')));
+    assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  }
+});
+test('cancelled booking deletion commits together with audit and rolls back if audit fails', async () => {
+  const booking = { id: '2', status: 'cancelled', purpose: 'Study' };
+  const calls = fakeDatabase(booking);
+  assert.equal((await admin.request('/api/admin/bookings/2', { method: 'DELETE' })).status, 204);
+  assert.deepEqual(calls.find(call => call.sql.startsWith('DELETE FROM bookings')).params, ['2']);
+  const event = calls.find(call => call.sql.includes('INSERT INTO admin_audit_log'));
+  assert.equal(event.params[2], 'booking.delete');
+  assert.deepEqual(JSON.parse(event.params[5]), booking);
+  assert.equal(event.params[6], 'null');
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
+  const failed = fakeDatabase(booking, { auditFailure: true });
+  await assert.rejects(service.deleteBooking('1', '2'));
+  assert.ok(failed.some(call => call.sql === 'ROLLBACK'));
+  assert.ok(!failed.some(call => call.sql === 'COMMIT'));
+});
+
 test('second factor reset revokes sessions, preserves role and audits without secrets', async () => {
   const calls = fakeDatabase({ ...actor, id: '2' });
   const response = await admin.request('/api/admin/users/2/reset-2fa', { method: 'POST' });
@@ -171,4 +205,34 @@ test('access rules and deleted schedules are recorded in audit', async()=>{
  const response=await admin.request(path,{method,...(body?{body:JSON.stringify(body)}:{})});
  assert.equal(response.status,method==='PUT'?200:204);assert.ok(calls.some(c=>c.sql.includes('INSERT INTO admin_audit_log')));assert.equal(calls.at(-1).sql,'COMMIT');
  }
+});
+
+
+test('approval rechecks occupancy, rejects conflicts and audits the decision', async () => {
+  for (const conflict of [false, true]) {
+    const calls = [];
+    pool.connect = async () => ({ release() {}, async query(sql, params) {
+      calls.push({sql,params});
+      if (sql.includes('FROM users')) return {rows:[actor]};
+      if (sql.includes('FROM bookings') && sql.includes('FOR UPDATE')) return {rows:[{id:'2',room_id:'1',status:'pending',future:true,date_text:'2099-01-01',start_time:'10:00:00',end_time:'11:00:00'}]};
+      if (sql.includes('FROM rooms')) return {rows:[{id:'1',is_active:true,student_access:true}]};
+      if (sql.includes('FROM room_events')) return {rows:[]};
+      if (sql.includes('FROM bookings')) { assert.match(sql,/status='confirmed'/); return {rowCount:conflict?1:0}; }
+      if (sql.startsWith('UPDATE bookings')) return {rows:[{id:'2',status:params[1]}]};
+      return {rows:[]};
+    }});
+    const response = await admin.request('/api/admin/bookings/2/approve',{method:'POST'});
+    assert.equal(response.status,conflict?409:200);
+    assert.equal(calls.some(c=>c.sql==='COMMIT'),!conflict);
+    assert.equal(calls.some(c=>c.sql.includes('INSERT INTO admin_audit_log')),!conflict);
+  }
+});
+test('review endpoints enforce access and reject requests already decided', async () => {
+  for (const action of ['approve','reject']) {
+    const path = `/api/admin/bookings/2/${action}`;
+    assert.equal((await ordinary.request(path,{method:'POST',body:JSON.stringify({reason:'Not suitable'})})).status,403);
+    assert.equal((await admin.request(path,{method:'POST',headers:{'X-CSRF-Token':'wrong'}})).status,403);
+    fakeDatabase({id:'2',status:'confirmed'});
+    assert.equal((await admin.request(path,{method:'POST',body:JSON.stringify({reason:'Not suitable'})})).status,409);
+  }
 });

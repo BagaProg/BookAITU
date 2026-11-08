@@ -1,0 +1,42 @@
+.campus-map{margin:24px 0;padding:24px;background:white;border:1px solid #dce4ed;border-radius:20px;color:#24334a}.campus-map h2{font-size:24px;font-weight:700}.campus-map-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.campus-map-toolbar select,.campus-map-toolbar button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white}.campus-map-toolbar button:disabled{opacity:.4}.campus-map-zoom{display:flex;gap:6px}.campus-map-legend{display:flex;gap:20px;flex-wrap:wrap;margin:18px 0}.campus-map-legend span{display:flex;gap:7px;align-items:center}.campus-map-legend i{width:14px;height:14px;border-radius:4px;background:var(--room-color)}.campus-map-legend .campus-map-toilet-legend i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;background:#dbeafe;color:#1d4ed8;font-size:14px;font-style:normal}.campus-map [data-availability=available]{--room-color:#168454}.campus-map [data-availability=occupied]{--room-color:#dc3545}.campus-map [data-availability=unavailable]{--room-color:#b77908}.campus-map [data-availability=unknown]{--room-color:#778394}.campus-map-scroll{overflow:auto;border:1px solid #dce4ed;border-radius:12px;background:#f4f7fb}.campus-map svg{width:100%;min-width:700px;display:block;min-height:300px}.campus-map .bg{fill:#e8edf3;stroke:#a2adbb}.campus-map svg polyline,.campus-map svg polygon,.campus-map svg line{fill:none;stroke:#7c899b;stroke-width:.65}.campus-map svg path{fill:#536174}.campus-map svg g[data-availability]{cursor:pointer;outline:none}.campus-map svg g[data-availability]>polyline,.campus-map svg g[data-availability]>polygon,.campus-map svg g[data-availability]>rect{fill:var(--room-color);stroke:#fff;stroke-width:.8}.campus-map svg g[data-availability]>path{fill:white;stroke:white;stroke-width:.1;pointer-events:none}.campus-map svg g[data-availability]:hover,.campus-map svg g[data-availability]:focus,.campus-map svg g[aria-pressed=true]{filter:drop-shadow(0 0 2px #152b50)}.campus-map-detail{margin:16px 0;padding:16px;background:#f1f5fa;border-radius:12px}.campus-map-detail a,.campus-map-credit a{color:#245cbd;text-decoration:underline}.campus-map small,.campus-map-credit{font-size:12px;color:#58697e}.campus-map-credit{margin-top:12px}@media(max-width:600px){.campus-map{padding:14px}.campus-map-legend{gap:10px;font-size:13px}}
+
+/* Keep the original campus toilet markers visible above the floor plan. */
+.campus-map svg .map-groups-wcs-icon {
+  opacity:  1;
+  visibility: visible;
+  pointer-events: none;
+}
+.campus-map svg .map-groups-wcs-icon > path:first-child {
+  fill: #ffffff !important;
+  stroke: #2563eb;
+  stroke-width: 1.1;
+}
+.campus-map svg .map-groups-wcs-icon > path:last-child {
+  fill: #1d4ed8 !important;
+  stroke: #1d4ed8;
+  stroke-width: 0.35;
+}
+
+/* Map controls and selection card; floor-plan geometry stays unchanged. */
+.campus-map{padding:28px;box-shadow:0 8px 32px #142d5010}
+.campus-map-toolbar h2{margin-bottom:6px;letter-spacing:-.5px}
+.campus-map-toolbar p{color:#64748b;font-size:14px}
+.campus-map-floors{display:flex;gap:4px;padding:4px;background:#eef3f9;border-radius:12px}
+.campus-map-floors button{border:0;background:transparent;font-weight:600;border-radius:9px}
+.campus-map-floors button[aria-pressed=true]{background:#152e50;color:white;box-shadow:0 2px 6px #152e5020}
+.campus-map-zoom{align-items:center}
+.campus-map-zoom button{min-width:40px;font-weight:600}
+.campus-map-toolbar button:focus-visible,.campus-map-detail a:focus-visible{outline:3px solid #6398e0;outline-offset:3px}
+.campus-map-legend{font-size:13px;padding:14px 0;border-top:1px solid #edf1f6}
+.campus-map-scroll{max-height:65vh;overscroll-behavior:contain}
+.campus-map-detail{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;padding:20px;margin:20px 0;background:#f2f6fc;border:1px solid #dce6f2}
+.campus-map-detail strong{font-size:18px}
+.campus-map-detail p{flex-basis:100%;color:#5d6d83;font-size:14px;order:2}
+.campus-map-detail a{margin-left:auto;display:inline-flex;padding:12px 18px;border-radius:10px;background:#152e50;color:white;font-size:14px;font-weight:600;text-decoration:none}
+.campus-map-detail a:hover{background:#25476e}
+.campus-map-credit{padding-top:12px}
+@media(max-width:600px){.campus-map{padding:16px}.campus-map-detail a{margin-left:0;width:100%;justify-content:center}.campus-map-detail p{order:0}.campus-map-scroll{max-height:55vh}}
+
+/* Keep the zoomed drawing inside its scroll viewport, including flex layouts. */
+.campus-map{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+.campus-map-scroll{width:100%;min-width:0;max-width:100%;contain:inline-size}

@@ -20,6 +20,7 @@ export async function request(path, options) {
     if (response.status === 401 && (body.code === 'AUTH_REQUIRED' || body.code === 'MICROSOFT_LOGIN_REQUIRED' || !body.code)) window.dispatchEvent(new Event('session-expired'));
     throw error;
   }
+  if (options?.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method.toUpperCase()) && /^\/api\/(bookings|admin)(?:[/?]|$)/.test(path)) window.dispatchEvent(new Event('bookings-changed'));
   if (response.status === 204) return undefined;
   const result = await response.json();
   if (result.csrfToken) setCsrfToken(result.csrfToken);

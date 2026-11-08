@@ -14,7 +14,7 @@ function evaluate(room, events, start, end, booked = false) {
 async function inspect(db, room, date, start, end) {
   const from = `${date}T${start}+05:00`, to = `${date}T${end}+05:00`;
   const events = (await db.query('SELECT * FROM room_events WHERE room_id=$1 AND ends_at>$2::timestamptz ORDER BY starts_at', [room.id,from])).rows;
-  const booked = (await db.query("SELECT id FROM bookings WHERE room_id=$1 AND booking_date=$2 AND status<>'cancelled' AND start_time<$4::time AND end_time>$3::time LIMIT 1", [room.id,date,start,end])).rowCount > 0;
+  const booked = (await db.query("SELECT id FROM bookings WHERE room_id=$1 AND booking_date=$2 AND status='confirmed' AND start_time<$4::time AND end_time>$3::time LIMIT 1", [room.id,date,start,end])).rowCount > 0;
   return { ...evaluate(room,events,Date.parse(from),Date.parse(to),booked), next_class: events.find(e=>e.kind==='class' && Date.parse(e.starts_at)>=Date.parse(from)) || null, schedule_updated_at: events.reduce((latest,e)=>!latest || Date.parse(e.updated_at)>Date.parse(latest)?e.updated_at:latest,null) };
 }
 module.exports = { evaluate, inspect };
