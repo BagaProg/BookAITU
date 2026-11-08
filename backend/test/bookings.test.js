@@ -40,19 +40,19 @@ test('validates dates, ids, time ranges and required purpose', () => {
 
 const post = body => signedIn.request('/api/bookings', { method: 'POST', body: JSON.stringify(body) });
 
-function mockTransaction({ missing = false, conflict = false, failure = false } = {}) {
+function mockTransaction({ missing = false, conflict = false, failure = false, restricted = false, inactive = false } = {}) {
   const calls = [];
   pool.connect = async () => ({
     query: async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes('FROM rooms')) return { rowCount: missing ? 0 : 1, rows: missing ? [] : [{id:'1',is_active:true,student_access:true}] };
+      if (sql.includes('FROM rooms')) return { rowCount: missing ? 0 : 1, rows: missing ? [] : [{id:'1',is_active:!inactive,student_access:!restricted}] };
       if (sql.includes('FROM room_events')) return {rows:[{kind:'coverage',starts_at:'2099-10-23T00:00:00+05:00',ends_at:'2099-10-24T00:00:00+05:00'}]};
       if (sql.includes('FROM users')) return { rowCount: 1 };
       if (sql.includes('count(*)')) return { rows: [{ count: 0 }] };
       if (sql.includes('FROM bookings')) return { rowCount: conflict ? 1 : 0 };
       if (sql.includes('INSERT')) {
         assert.match(sql, /purpose, status/);
-        assert.match(sql, /\$7/); assert.equal(params[6], 'pending');
+        assert.match(sql, /\$7/); assert.equal(params[6], harness.user.role === 'admin' ? 'confirmed' : 'pending');
         if (failure) throw Object.assign(new Error('private database details'), { code: 'XX000' });
         return { rows: [{ id: 123 }] };
       }
@@ -145,4 +145,30 @@ test('availability includes disabled rooms and checks overlaps across all users 
   const body = await response.json();
   assert.deepEqual(body.rooms.map(r=>r.availability), ['available','occupied','unavailable']);
   assert.ok(Number.isFinite(Date.parse(body.checkedAt)));
+});
+
+test('restricted yellow rooms reject students and allow only administrator direct bookings', async () => {
+  for (const options of [{restricted:true},{inactive:true}]) {
+    let calls=mockTransaction(options);
+    assert.equal((await post(valid)).status,403);
+    assert.ok(!calls.some(c=>c.sql.includes('INSERT')));
+    harness.user.role='admin';
+    try {
+      calls=mockTransaction(options);
+      assert.equal((await post(valid)).status,201);
+      assert.equal(calls.find(c=>c.sql.includes('INSERT')).params[6],'confirmed');
+      mockTransaction({...options,conflict:true});
+      assert.equal((await post(valid)).status,409);
+    } finally { harness.user.role='user'; }
+  }
+});
+test('outside booking hours are rejected for both roles before database access',async()=>{
+ pool.connect=async()=>{throw new Error('must not connect')};
+ for(const role of ['user','admin']) {
+  harness.user.role=role;
+  try {
+   assert.equal((await post({...valid,start_time:'07:59'})).status,400);
+   assert.equal((await post({...valid,start_time:'21:00',end_time:'22:00:01'})).status,400);
+  } finally {harness.user.role='user'}
+ }
 });

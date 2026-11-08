@@ -12,6 +12,7 @@ function validateBooking(body) {
   if (!validTime(start_time) || !validTime(end_time)) return 'Invalid booking time';
   const seconds = value => value.length === 5 ? `${value}:00` : value;
   if (seconds(start_time) >= seconds(end_time)) return 'End time must be after start time';
+  if (seconds(start_time) < '08:00:00' || seconds(end_time) > '22:00:00') return 'Booking hours are 08:00–22:00 (Astana time)';
   if (typeof purpose !== 'string' || !purpose.trim()) return 'Purpose is required';
   return null;
 }

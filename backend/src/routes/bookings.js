@@ -34,7 +34,7 @@ router.post('/', allowWrite, async (req, res) => {
   try {
     await client.query('BEGIN');
     // Lock the room so concurrent API requests cannot both reserve the same slot.
-    const room = await client.query('SELECT * FROM rooms WHERE id = $1 AND is_active FOR UPDATE', [room_id]);
+    const room = await client.query('SELECT * FROM rooms WHERE id = $1 FOR UPDATE', [room_id]);
     const user = await client.query('SELECT id FROM users WHERE id = $1 AND is_active FOR UPDATE', [user_id]);
     if (!room.rowCount || !user.rowCount) {
       await client.query('ROLLBACK');
@@ -44,8 +44,8 @@ router.post('/', allowWrite, async (req, res) => {
       const count = await client.query("SELECT count(*)::int AS count FROM bookings WHERE user_id=$1 AND status='pending' AND booking_date>=timezone('Asia/Qyzylorda',now())::date", [user_id]);
       if (count.rows[0].count >= 2) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'You may have at most two pending requests' }); }
     }
-    const availability = await require('../availability').inspect(client, room.rows[0], booking_date, start_time, end_time);
-    if (availability.availability !== 'available') { await client.query('ROLLBACK'); return res.status(409).json({ error: availability.reason }); }
+    const availability = await require('../availability').inspect(client, room.rows[0], booking_date, start_time, end_time, req.user.role);
+    if (!availability.bookable) { await client.query('ROLLBACK'); return res.status(availability.availability === 'unavailable' ? 403 : 409).json({ error: availability.reason }); }
     const overlap = await client.query(
       `SELECT id FROM bookings WHERE room_id = $1 AND booking_date = $2
        AND status = 'confirmed' AND start_time < $4 AND end_time > $3 LIMIT 1`,

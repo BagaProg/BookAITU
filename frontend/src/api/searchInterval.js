@@ -5,7 +5,7 @@ export function readSearchInterval() {
   }
   try {
     const value = JSON.parse(sessionStorage.getItem('bookaitu-search-interval'))
-    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && /^\d{2}:\d{2}$/.test(value.start) && /^\d{2}:\d{2}$/.test(value.end) && value.start < value.end) return value
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value.date) && /^\d{2}:\d{2}$/.test(value.start) && /^\d{2}:\d{2}$/.test(value.end) && value.start < value.end && value.start >= '08:00' && value.end <= '22:00') return value
   } catch { /* Storage can be disabled by browser settings. */ }
   return fallback
 }

@@ -13,8 +13,8 @@ router.get('/availability', async (req,res) => {
  res.set('Cache-Control','no-store');
  res.json({checkedAt:new Date().toISOString(),rooms:rooms.map(room=>{
   const own=events.filter(e=>String(e.room_id)===String(room.id));
-  return {...room,...evaluate(room,own,Date.parse(from),Date.parse(to),bookings.some(b=>String(b.room_id)===String(room.id))),next_class:own.find(e=>e.kind==='class' && Date.parse(e.starts_at)>=Date.parse(from))||null,schedule_updated_at:own.reduce((latest,e)=>!latest||Date.parse(e.updated_at)>Date.parse(latest)?e.updated_at:latest,null)};
+  return {...room,...evaluate(room,own,Date.parse(from),Date.parse(to),bookings.some(b=>String(b.room_id)===String(room.id)),req.user.role),next_class:own.find(e=>e.kind==='class' && Date.parse(e.starts_at)>=Date.parse(from))||null,schedule_updated_at:own.reduce((latest,e)=>!latest||Date.parse(e.updated_at)>Date.parse(latest)?e.updated_at:latest,null)};
  })});
 });
-router.get('/',async(req,res)=>res.json((await pool.query('SELECT id,COALESCE(name,code) AS name,block,floor,number,code,room_type,capacity,access_rules,student_access,details_updated_at FROM rooms WHERE is_active ORDER BY block,floor,number')).rows));
+router.get('/',async(req,res)=>res.json((await pool.query('SELECT id,COALESCE(name,code) AS name,block,floor,number,code,room_type,capacity,access_rules,student_access,details_updated_at FROM rooms WHERE (is_active OR $1::boolean) ORDER BY block,floor,number', [req.user.role === 'admin'])).rows));
 module.exports=router;

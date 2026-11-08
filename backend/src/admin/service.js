@@ -94,6 +94,7 @@ async function decideBooking(actorId, id, approve, reason = '') {
     if (before.status !== 'pending') throw fail(409, 'Only pending requests can be reviewed');
     if (!before.future) throw fail(409, 'The requested start time has passed');
     if (approve) {
+      if (before.start_time < '08:00:00' || before.end_time > '22:00:00') throw fail(400, 'Booking hours are 08:00–22:00 (Astana time)');
       const room = (await client.query('SELECT * FROM rooms WHERE id=$1 FOR UPDATE', [before.room_id])).rows[0];
       if (!room) throw fail(404, 'Room not found');
       const state = await require('../availability').inspect(client, room, before.date_text, before.start_time, before.end_time);
